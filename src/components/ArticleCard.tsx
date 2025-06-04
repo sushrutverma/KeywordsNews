@@ -142,6 +142,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className="article-card glass-card rounded-xl overflow-hidden mb-6 relative"
+      style={{ touchAction: 'pan-y' }}
     >
       {article.image && (
         <div className="w-full h-48 overflow-hidden">
