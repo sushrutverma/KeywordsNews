@@ -20,23 +20,18 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
   const [error, setError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   
-  // Prevent body scroll when modal is open
   useEffect(() => {
     if (showSummary) {
       document.body.style.overflow = 'hidden';
-      document.body.style.paddingRight = 'var(--scrollbar-width, 0px)';
     } else {
       document.body.style.overflow = '';
-      document.body.style.paddingRight = '';
     }
 
     return () => {
       document.body.style.overflow = '';
-      document.body.style.paddingRight = '';
     };
   }, [showSummary]);
 
-  // Add null check for article
   if (!article) {
     return null;
   }
@@ -47,10 +42,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
     if (!content) return '';
     
     try {
-      // Strip HTML tags
       const strippedContent = content.replace(/<[^>]*>/g, '');
-      
-      // Decode HTML entities more safely
       const decodedContent = strippedContent.replace(/&[^;]+;/g, match => {
         try {
           const div = document.createElement('div');
@@ -102,13 +94,10 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
         });
       } else {
         await navigator.clipboard.writeText(article.link);
-        // Use a more user-friendly notification instead of alert
         console.log('Link copied to clipboard!');
-        // You might want to show a toast notification here instead
       }
     } catch (error) {
       console.error('Error sharing:', error);
-      // Handle the error gracefully - maybe show a toast notification
     }
   };
 
@@ -127,7 +116,6 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
   };
 
   const handleModalBackdropClick = (e: React.MouseEvent | React.TouchEvent) => {
-    // Only close if clicking directly on backdrop, not on modal content
     if (e.target === e.currentTarget) {
       setShowSummary(false);
     }
@@ -158,7 +146,6 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
     setShowSummary(!showSummary);
   };
 
-  // Safe date formatting
   const formatDate = (dateString: string | Date) => {
     try {
       const date = new Date(dateString);
@@ -179,17 +166,16 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="article-card glass-card neu-element rounded-xl overflow-hidden mb-6 relative transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 touch-manipulation"
+      className="article-card glass-card rounded-xl overflow-hidden mb-6 relative"
     >
       {article.image && (
         <div className="w-full h-48 overflow-hidden">
           <img 
             src={article.image} 
             alt={article.title || 'Article image'} 
-            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+            className="w-full h-full object-cover"
             loading="lazy"
             onError={(e) => {
-              // Hide image if it fails to load
               e.currentTarget.style.display = 'none';
             }}
           />
@@ -204,7 +190,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
         </div>
         
         <Link to={`/article/${article.id}`}>
-          <h2 className="text-xl font-playfair font-bold mb-3 text-primary dark:text-primary-dark hover:opacity-90 transition-opacity">
+          <h2 className="text-xl font-playfair font-bold mb-3 text-primary dark:text-primary-dark">
             {highlightKeyword(article.title || 'Untitled', keyword)}
           </h2>
         </Link>
@@ -219,34 +205,31 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
           <div className="flex space-x-3">
             <Link
               to={`/article/${article.id}`}
-              className="fab px-4 py-2 rounded-full text-white text-sm font-medium flex items-center hover:opacity-90"
+              className="fab px-4 py-2 rounded-full text-white text-sm font-medium flex items-center"
             >
               Read more <ExternalLink size={14} className="ml-2" />
             </Link>
 
-            <motion.button
-              whileTap={{ scale: 0.95 }}
+            <button
               onClick={handleSummarize}
               disabled={isLoading}
-              className="px-4 py-2 rounded-full bg-accent/10 text-accent dark:bg-accent-dark/10 dark:text-accent-dark text-sm font-medium flex items-center hover:opacity-90 disabled:opacity-50"
+              className="px-4 py-2 rounded-full bg-accent/10 text-accent dark:bg-accent-dark/10 dark:text-accent-dark text-sm font-medium flex items-center disabled:opacity-50"
             >
               <Sparkles size={14} className="mr-2" />
               {isLoading ? 'Loading...' : 'AI Summary'}
-            </motion.button>
+            </button>
           </div>
           
           <div className="flex space-x-2">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
+            <button
               onClick={handleShare}
               className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
               title="Share article"
             >
               <Share2 size={18} className="text-gray-600 dark:text-gray-400" />
-            </motion.button>
+            </button>
             
-            <motion.button
-              whileTap={{ scale: 0.9 }}
+            <button
               onClick={handleBookmarkToggle}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ${
                 isBookmarked ? 'text-accent dark:text-accent-dark' : 'text-gray-600 dark:text-gray-400'
@@ -254,7 +237,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
               title={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
             >
               <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
-            </motion.button>
+            </button>
           </div>
         </div>
       </div>
@@ -277,8 +260,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="glass-card relative max-w-lg w-full p-6 rounded-2xl max-h-[80vh] overflow-y-auto overscroll-contain"
-              style={{ touchAction: 'pan-y' }}
+              className="glass-card relative max-w-lg w-full p-6 rounded-2xl max-h-[80vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center">
