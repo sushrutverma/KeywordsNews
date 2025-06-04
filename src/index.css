@@ -216,7 +216,11 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
   -webkit-tap-highlight-color: transparent;
   position: relative;
   z-index: 1;
+
+  /* Allow vertical swipes (pan‐y) on the card so scroll events bubble up */
+  touch-action: pan-y;
 }
+
 
 /* Responsive text sizes */
 @media (max-width: 640px) {
