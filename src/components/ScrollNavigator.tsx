@@ -152,11 +152,11 @@ const MouseScrollNavigator = () => {
       <motion.div
         ref={wheelRef}
         className={`
-          w-20 h-32 rounded-full backdrop-blur-sm border-2 flex flex-col items-center justify-center
+          w-10 h-19.2 rounded-full backdrop-blur-sm border flex flex-col items-center justify-center
           transition-all duration-200 cursor-pointer relative overflow-hidden
           ${isScrolling 
-            ? 'bg-blue-500/80 border-blue-400 text-white shadow-lg' 
-            : 'bg-white/90 border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 hover:shadow-lg'
+            ? 'bg-blue-500/24 border-blue-400/30 text-white/70 shadow-lg' 
+            : 'bg-white/27 border-gray-300/30 text-gray-700/70 hover:bg-white/30 hover:border-gray-400/30 hover:shadow-lg'
           }
         `}
         onWheel={handleWheel}
@@ -172,45 +172,45 @@ const MouseScrollNavigator = () => {
       >
         {/* Mouse Body */}
         <div className="relative">
-          <Mouse size={32} strokeWidth={2} />
+          <Mouse size={19} strokeWidth={1.5} />
           
           {/* Scroll Wheel with Rotation Animation */}
           <motion.div
-            className="absolute top-2 left-1/2 transform -translate-x-1/2 w-3 h-4 border-2 border-current rounded-full flex items-center justify-center"
+            className="absolute top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 border border-current rounded-full flex items-center justify-center"
             animate={{ rotate: wheelRotation }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
           >
-            <div className="w-1 h-2 bg-current rounded-full opacity-60" />
+            <div className="w-0.5 h-1 bg-current rounded-full opacity-40" />
           </motion.div>
         </div>
 
         {/* Direction Indicators */}
-        <div className="absolute inset-0 flex flex-col justify-between items-center py-2 pointer-events-none">
+        <div className="absolute inset-0 flex flex-col justify-between items-center py-1 pointer-events-none">
           <motion.div
             animate={{ 
-              opacity: scrollDirection === 'up' ? 1 : 0.3,
-              scale: scrollDirection === 'up' ? 1.2 : 1
+              opacity: scrollDirection === 'up' ? 0.7 : 0.2,
+              scale: scrollDirection === 'up' ? 1.1 : 1
             }}
             transition={{ duration: 0.2 }}
           >
-            <ChevronUp size={16} strokeWidth={3} />
+            <ChevronUp size={10} strokeWidth={2} />
           </motion.div>
           
           <motion.div
             animate={{ 
-              opacity: scrollDirection === 'down' ? 1 : 0.3,
-              scale: scrollDirection === 'down' ? 1.2 : 1
+              opacity: scrollDirection === 'down' ? 0.7 : 0.2,
+              scale: scrollDirection === 'down' ? 1.1 : 1
             }}
             transition={{ duration: 0.2 }}
           >
-            <ChevronDown size={16} strokeWidth={3} />
+            <ChevronDown size={10} strokeWidth={2} />
           </motion.div>
         </div>
 
         {/* Active State Glow */}
         {isScrolling && (
           <motion.div
-            className="absolute inset-0 rounded-full bg-blue-400/20"
+            className="absolute inset-0 rounded-full bg-blue-400/10"
             animate={{ scale: [1, 1.1, 1] }}
             transition={{ repeat: Infinity, duration: 1 }}
           />
