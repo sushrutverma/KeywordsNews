@@ -25,6 +25,7 @@ html {
   height: -webkit-fill-available;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -41,8 +42,7 @@ body {
 }
 
 /*——————————————————————————————————
-  3. Glass card, elevation, FAB, ripple, etc. (unchanged)
-     (If you already have these, keep them exactly as-is.)
+  3. Glass card, elevation, FAB, ripple, etc.
 ——————————————————————————————————*/
 
 /* Glass card */
@@ -169,8 +169,7 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
 }
 
 /*——————————————————————————————————
-  4. Main content scrolling (.main-content and .ios-scroll-fix)
-     Applied to the <motion.div> inside App.tsx
+  4. Main content scrolling
 ——————————————————————————————————*/
 .main-content {
   -webkit-overflow-scrolling: touch;
@@ -180,8 +179,7 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
   z-index: 1;
 }
 
-/* For some iOS-specific quirks, you can also use .ios-scroll-fix 
-   wherever you want exact iOS momentum behavior */
+/* iOS scroll fix */
 @supports (-webkit-touch-callout: none) {
   .ios-scroll-fix {
     -webkit-overflow-scrolling: touch;
@@ -192,8 +190,7 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
 }
 
 /*——————————————————————————————————
-  5. Pull-to-refresh container (.ptr-container)
-     Applied to <ReactPullToRefresh> in HomePage.tsx
+  5. Pull-to-refresh container
 ——————————————————————————————————*/
 .ptr-element {
   pointer-events: auto;
@@ -208,19 +205,14 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
 }
 
 /*——————————————————————————————————
-  6. Article card touch handling & responsive text sizes
-     (unchanged if you already have these)
+  6. Article card touch handling
 ——————————————————————————————————*/
-/* Article card touch handling */
 .article-card {
   -webkit-tap-highlight-color: transparent;
   position: relative;
   z-index: 1;
-
-  /* Allow vertical swipes (pan‐y) on the card so scroll events bubble up */
   touch-action: pan-y;
 }
-
 
 /* Responsive text sizes */
 @media (max-width: 640px) {

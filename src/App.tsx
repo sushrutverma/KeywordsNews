@@ -10,6 +10,7 @@ import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import Navbar from './components/Navbar';
+import ScrollNavigator from './components/ScrollNavigator';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { NewsProvider } from './contexts/NewsContext';
 import { SearchHistoryProvider } from './contexts/SearchHistoryContext';
@@ -81,6 +82,7 @@ function AppContent() {
         </motion.div>
       </AnimatePresence>
       {user && <Navbar />}
+      <ScrollNavigator />
     </div>
   );
 }
