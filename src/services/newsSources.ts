@@ -46,11 +46,6 @@ export const news_sources: NewsSource[] = [
     category: "Top Stories"
   },
   {
-    name: "India Today",
-    url: "https://www.indiatoday.in/rss/home",
-    category: "Top Stories"
-  },
-  {
     name: "Economic Times",
     url: "https://economictimes.indiatimes.com/rss/topstories.cms",
     category: "Business"
@@ -58,11 +53,6 @@ export const news_sources: NewsSource[] = [
   {
     name: "Moneycontrol",
     url: "https://www.moneycontrol.com/rss/MCtopnews.xml",
-    category: "Business"
-  },
-  {
-    name: "Business Standard",
-    url: "https://www.business-standard.com/rss/economy-policy-10208.rss",
     category: "Business"
   },
   {
@@ -88,11 +78,6 @@ export const news_sources: NewsSource[] = [
   {
     name: "Bollywood Hungama",
     url: "https://www.bollywoodhungama.com/rss/news.xml",
-    category: "Entertainment"
-  },
-  {
-    name: "India Today Entertainment",
-    url: "https://www.indiatoday.in/rss/1206514",
     category: "Entertainment"
   },
   {
