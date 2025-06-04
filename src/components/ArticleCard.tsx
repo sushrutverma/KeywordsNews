@@ -5,7 +5,7 @@ import { useNews } from '../contexts/NewsContext';
 import { Article } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { summarizeArticleWithMistral } from '../services/aiService';
+import { aiService } from '../services/aiService';
 
 interface ArticleCardProps {
   article: Article;
@@ -167,7 +167,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, index, keyword }) =>
     setSummaryError(null);
     try {
       const articleTextToSummarize = `${article.title}. ${formatContent(article.description || article.content)}`;
-      const generatedSummary = await summarizeArticleWithMistral(articleTextToSummarize);
+      const { summary: generatedSummary } = await aiService.summarize(articleTextToSummarize);
       setSummary(generatedSummary);
     } catch (error) {
       console.error("Error summarizing article:", error);
@@ -207,17 +207,16 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, index, keyword }) =>
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
-      // THIS IS THE APPLIED CHANGE:
       className={`bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden ${isSpeaking ? 'ring-2 ring-blue-500' : ''} ${isViewed ? 'opacity-70 dark:opacity-60' : ''} touch-pan-y`}
       onClick={handleCardClick}
-      style={{ transformOrigin: 'top center' }} // Helps with smooth animation if height changes
+      style={{ transformOrigin: 'top center' }}
     >
       {article.imageUrl && (
         <img
           src={article.imageUrl}
           alt={article.title}
           className="w-full h-48 object-cover"
-          onError={(e) => (e.currentTarget.style.display = 'none')} // Hide if image fails to load
+          onError={(e) => (e.currentTarget.style.display = 'none')}
         />
       )}
       <div className="p-4">
@@ -273,7 +272,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, index, keyword }) =>
                 href={article.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()} // Prevent card click when clicking link directly
+                onClick={(e) => e.stopPropagation()}
                 title="Open Article in New Tab"
                 className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center"
               >
@@ -295,14 +294,14 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, index, keyword }) =>
       {showSummary && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowSummary(false)} // Close on overlay click
+          onClick={() => setShowSummary(false)}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-xl font-semibold text-gray-800 dark:text-gray-100">Article Summary</h4>
