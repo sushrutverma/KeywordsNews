@@ -21,7 +21,7 @@ const HomePage = () => {
   };
 
   return (
-    <div className="mb-16">
+    <div className="flex-1 mb-16 h-full">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -44,22 +44,26 @@ const HomePage = () => {
         onRefresh={handleRefresh}
         pullingContent={
           <div className="flex justify-center items-center py-2">
-            <RefreshCw className="animate-spin text-indigo-600 dark:text-indigo-400\" size={24} />
-            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Pull to refresh...</span>
+            <RefreshCw className="animate-spin text-indigo-600 dark:text-indigo-400" size={24} />
+            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+              Pull to refresh...
+            </span>
           </div>
         }
         refreshingContent={
           <div className="flex justify-center items-center py-2">
             <RefreshCw className="animate-spin text-indigo-600 dark:text-indigo-400" size={24} />
-            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Refreshing...</span>
+            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+              Refreshing...
+            </span>
           </div>
         }
-        className="ptr-container"
+        className="ptr-container h-full overflow-y-auto"
       >
         <div className="space-y-6">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <RefreshCw className="animate-spin text-indigo-600 dark:text-indigo-400 mb-4\" size={32} />
+              <RefreshCw className="animate-spin text-indigo-600 dark:text-indigo-400 mb-4" size={32} />
               <p className="text-gray-600 dark:text-gray-400">Loading the latest news...</p>
             </div>
           ) : isError ? (
@@ -76,7 +80,9 @@ const HomePage = () => {
           ) : filteredArticles.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <p className="text-gray-600 dark:text-gray-400 mb-2">
-                {currentKeyword ? `No articles found for "${currentKeyword}"` : 'No articles available.'}
+                {currentKeyword
+                  ? `No articles found for "${currentKeyword}"`
+                  : 'No articles available.'}
               </p>
               {currentKeyword && (
                 <button
