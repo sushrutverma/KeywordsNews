@@ -327,30 +327,7 @@ const Header = () => {
         )}
       </AnimatePresence>
 
-      {/* Demo Content */}
-      <div className="p-8 max-w-4xl mx-auto">
-        <div className="text-center space-y-4">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Enhanced News Header Demo
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Active section: <span className="font-semibold text-blue-600">{activeSection}</span>
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
-                <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg mb-4"></div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
-                  Sample News Article {i}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  This is a placeholder for news content. The header above demonstrates enhanced functionality.
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+
     </>
   );
 };
