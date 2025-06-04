@@ -54,7 +54,7 @@ function AppContent() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3 }}
-          className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-24 main-content ios-scroll-fix"
+          className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-24 main-content ios-scroll-fix h-full overflow-y-auto"
         >
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
