@@ -19,73 +19,55 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+
     if (showSummary) {
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
     }
 
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = originalOverflow;
     };
   }, [showSummary]);
 
-  if (!article) {
-    return null;
-  }
+  if (!article) return null;
 
-  const isBookmarked = savedArticles?.some(a => a.id === article.id) || false;
+  const isBookmarked = savedArticles?.some((a) => a.id === article.id) || false;
 
   const formatContent = (content: string) => {
-    if (!content) return '';
-    
     try {
-      const strippedContent = content.replace(/<[^>]*>/g, '');
-      const decodedContent = strippedContent.replace(/&[^;]+;/g, match => {
-        try {
-          const div = document.createElement('div');
-          div.innerHTML = match;
-          return div.textContent || div.innerText || match;
-        } catch {
-          return match;
-        }
+      const stripped = content.replace(/<[^>]*>/g, '');
+      const decoded = stripped.replace(/&[^;]+;/g, (match) => {
+        const div = document.createElement('div');
+        div.innerHTML = match;
+        return div.textContent || div.innerText || match;
       });
-      
-      return decodedContent;
-    } catch (error) {
-      console.error('Error formatting content:', error);
+      return decoded;
+    } catch {
       return content;
     }
   };
 
   const highlightKeyword = (text: string, keyword?: string) => {
     if (!keyword || !text) return text;
-    
     try {
       const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-      const parts = text.split(regex);
-      
-      return parts.map((part, i) => 
+      return text.split(regex).map((part, i) =>
         regex.test(part) ? (
-          <span key={i} className="bg-primary/20 dark:bg-primary-dark/20">
-            {part}
-          </span>
-        ) : part
+          <span key={i} className="bg-primary/20 dark:bg-primary-dark/20">{part}</span>
+        ) : (
+          part
+        )
       );
-    } catch (error) {
-      console.error('Error highlighting keyword:', error);
+    } catch {
       return text;
     }
   };
 
   const handleShare = async () => {
     try {
-      if (!article.link) {
-        throw new Error('No link available to share');
-      }
-
       if (navigator.share && navigator.canShare) {
         await navigator.share({
           title: article.title || 'News Article',
@@ -93,32 +75,17 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
           url: article.link,
         });
       } else {
-        await navigator.clipboard.writeText(article.link);
+        await navigator.clipboard.writeText(article.link || '');
         console.log('Link copied to clipboard!');
       }
-    } catch (error) {
-      console.error('Error sharing:', error);
+    } catch (err) {
+      console.error('Error sharing:', err);
     }
   };
 
   const handleBookmarkToggle = () => {
     if (!article?.id) return;
-    
-    try {
-      if (isBookmarked) {
-        removeFromSaved(article.id);
-      } else {
-        saveArticle(article);
-      }
-    } catch (error) {
-      console.error('Error toggling bookmark:', error);
-    }
-  };
-
-  const handleModalBackdropClick = (e: React.MouseEvent | React.TouchEvent) => {
-    if (e.target === e.currentTarget) {
-      setShowSummary(false);
-    }
+    isBookmarked ? removeFromSaved(article.id) : saveArticle(article);
   };
 
   const handleSummarize = async () => {
@@ -131,30 +98,31 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
 
       setIsLoading(true);
       setError(null);
-      
       try {
         const result = await aiService.summarize(article.content);
         setSummary(result?.summary || 'No summary available.');
-      } catch (error) {
-        console.error('Error generating summary:', error);
-        setError('Failed to generate summary. Please try again.');
-        setSummary('');
+      } catch {
+        setError('Failed to generate summary.');
       } finally {
         setIsLoading(false);
+        setShowSummary(true);
       }
+    } else {
+      setShowSummary(false);
     }
-    setShowSummary(!showSummary);
   };
 
-  const formatDate = (dateString: string | Date) => {
+  const handleModalBackdropClick = (e: React.MouseEvent | React.TouchEvent) => {
+    if (e.target === e.currentTarget) {
+      setShowSummary(false);
+    }
+  };
+
+  const formatDate = (date: string | Date) => {
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return 'Unknown date';
-      }
-      return format(date, 'MMM dd, yyyy');
-    } catch (error) {
-      console.error('Error formatting date:', error);
+      const d = new Date(date);
+      return isNaN(d.getTime()) ? 'Unknown date' : format(d, 'MMM dd, yyyy');
+    } catch {
       return 'Unknown date';
     }
   };
@@ -170,9 +138,9 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
     >
       {article.image && (
         <div className="w-full h-48 overflow-hidden">
-          <img 
-            src={article.image} 
-            alt={article.title || 'Article image'} 
+          <img
+            src={article.image}
+            alt={article.title || 'Article image'}
             className="w-full h-full object-cover"
             loading="lazy"
             onError={(e) => {
@@ -181,26 +149,26 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
           />
         </div>
       )}
-      
+
       <div className="p-6">
         <div className="flex items-center mb-3">
           <span className="text-xs font-medium px-3 py-1 rounded-full bg-primary/10 text-primary dark:bg-primary-dark/10 dark:text-primary-dark">
-            {article.source || 'Unknown source'} • {formatDate(article.pubDate)}
+            {article.source || 'Unknown'} • {formatDate(article.pubDate)}
           </span>
         </div>
-        
+
         <Link to={`/article/${article.id}`}>
           <h2 className="text-xl font-playfair font-bold mb-3 text-primary dark:text-primary-dark">
             {highlightKeyword(article.title || 'Untitled', keyword)}
           </h2>
         </Link>
-        
+
         {formattedContent && (
           <p className="font-source-serif text-gray-700 dark:text-gray-300 mb-4 line-clamp-3">
             {highlightKeyword(formattedContent, keyword)}
           </p>
         )}
-        
+
         <div className="flex justify-between items-center pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
           <div className="flex space-x-3">
             <Link
@@ -219,22 +187,17 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
               {isLoading ? 'Loading...' : 'AI Summary'}
             </button>
           </div>
-          
+
           <div className="flex space-x-2">
-            <button
-              onClick={handleShare}
-              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-              title="Share article"
-            >
+            <button onClick={handleShare} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
               <Share2 size={18} className="text-gray-600 dark:text-gray-400" />
             </button>
-            
+
             <button
               onClick={handleBookmarkToggle}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ${
                 isBookmarked ? 'text-accent dark:text-accent-dark' : 'text-gray-600 dark:text-gray-400'
               }`}
-              title={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
             >
               <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
             </button>
@@ -260,7 +223,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="glass-card relative max-w-lg w-full p-6 rounded-2xl max-h-[80vh] overflow-y-auto"
+              className="glass-card relative max-w-lg w-full p-6 rounded-2xl max-h-[80vh] overflow-y-auto touch-pan-y overscroll-contain"
             >
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center">
@@ -270,26 +233,21 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
                 <button
                   onClick={() => setShowSummary(false)}
                   className="p-2 rounded-full hover:bg-gray-200/50 dark:hover:bg-gray-700/50"
-                  title="Close summary"
                 >
                   <X size={20} className="text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
-              
+
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent dark:border-accent-dark"></div>
                   <span className="ml-3 text-gray-600 dark:text-gray-400">Generating summary...</span>
                 </div>
               ) : error ? (
-                <div className="text-red-500 dark:text-red-400 text-center py-8">
-                  {error}
-                </div>
+                <div className="text-red-500 dark:text-red-400 text-center py-8">{error}</div>
               ) : (
                 <div className="prose dark:prose-invert max-w-none">
-                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
-                    {summary || 'No summary available.'}
-                  </p>
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">{summary}</p>
                 </div>
               )}
             </motion.div>
