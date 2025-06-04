@@ -178,10 +178,10 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
         )}
 
         <div className="flex justify-between items-center pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
-          <div className="flex space-x-3">
+          <div className="flex flex-wrap gap-2">
             <Link
               to={`/article/${article.id}`}
-              className="fab px-4 py-2 rounded-full text-white text-sm font-medium flex items-center"
+              className="fab whitespace-nowrap px-4 py-2 rounded-full text-white text-sm font-medium flex items-center"
             >
               Read more <ExternalLink size={14} className="ml-2" />
             </Link>
@@ -189,7 +189,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
             <button
               onClick={handleSummarize}
               disabled={isLoading}
-              className="px-4 py-2 rounded-full bg-accent/10 text-accent dark:bg-accent-dark/10 dark:text-accent-dark text-sm font-medium flex items-center disabled:opacity-50"
+              className="whitespace-nowrap px-4 py-2 rounded-full bg-accent/10 text-accent dark:bg-accent-dark/10 dark:text-accent-dark text-sm font-medium flex items-center disabled:opacity-50"
             >
               <Sparkles size={14} className="mr-2" />
               {isLoading ? 'Loading...' : 'AI Summary'}

@@ -70,8 +70,10 @@ const fetchRssFeed = async (sourceUrl: string, sourceName: string): Promise<Arti
     try {
       const response = await axios.get(`${proxyUrl}${encodeURIComponent(sourceUrl)}`, {
         timeout: 10000, // 10 second timeout
-        retry: 2, // Retry failed requests up to 2 times
-        retryDelay: 1000, // Wait 1 second between retries
+        headers: {
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+          'User-Agent': 'Mozilla/5.0 (compatible; NewsAggregator/1.0)'
+        }
       });
       
       // Sanitize the XML content before parsing
