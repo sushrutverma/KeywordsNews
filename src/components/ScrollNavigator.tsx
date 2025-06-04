@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronUp, ChevronDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 const ScrollNavigator = () => {
@@ -10,14 +10,8 @@ const ScrollNavigator = () => {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [isAtTop, setIsAtTop] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
   const navigatorRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
-
-  // Motion values for dragging with constraints
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const opacity = useTransform(y, [-50, 0, 50], [0.4, 0.9, 0.4]);
 
   // Throttled scroll handler for better performance
   const updateScrollState = useCallback(() => {
@@ -130,44 +124,6 @@ const ScrollNavigator = () => {
     stopAutoScroll();
   }, [stopAutoScroll]);
 
-  const handleDragStart = () => {
-    setIsDragging(true);
-  };
-
-  const handleDragEnd = (event: any, info: any) => {
-    setIsDragging(false);
-    
-    // Snap back to bounds if dragged too far
-    const bounds = {
-      left: -80,
-      right: 0,
-      top: -200,
-      bottom: 200
-    };
-    
-    // Get current position
-    const currentX = info.point.x - info.offset.x;
-    const currentY = info.point.y - info.offset.y;
-    
-    // Reset motion values smoothly
-    x.set(0);
-    y.set(0);
-    
-    // Update position state to keep track
-    setPosition({ x: Math.max(bounds.left, Math.min(bounds.right, currentX)), y: Math.max(bounds.top, Math.min(bounds.bottom, currentY)) });
-  };
-
-  const handleDrag = (event: any, info: any) => {
-    // Only scroll if dragging vertically with some threshold
-    if (Math.abs(info.velocity.y) > Math.abs(info.velocity.x) && Math.abs(info.velocity.y) > 100) {
-      const scrollSpeed = info.velocity.y * 0.2;
-      window.scrollBy({
-        top: scrollSpeed,
-        behavior: 'auto'
-      });
-    }
-  };
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -185,66 +141,56 @@ const ScrollNavigator = () => {
       {showButtons && (
         <motion.div
           ref={navigatorRef}
-          initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
-          animate={{ opacity: 0.9, scale: 1, rotate: 0 }}
-          exit={{ opacity: 0, scale: 0.5, rotate: 10 }}
-          style={{ 
-            opacity,
-            x,
-            y
-          }}
-          className="fixed right-6 bottom-32 z-50 touch-none select-none cursor-grab active:cursor-grabbing"
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 0.9, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.5 }}
+          className="fixed right-6 bottom-32 z-50 touch-none select-none"
           drag
           dragConstraints={{ 
-            left: -80, 
-            right: 0, 
-            top: -200, 
-            bottom: 200 
+            left: -100, 
+            right: 50, 
+            top: -300, 
+            bottom: 300 
           }}
-          dragElastic={0.05}
-          dragMomentum={false}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDrag={handleDrag}
-          whileHover={{ scale: 1.1 }}
-          whileDrag={{ scale: 1.05, rotate: 5 }}
+          dragElastic={0.2}
+          whileHover={{ scale: 1.05 }}
+          whileDrag={{ scale: 1.1, rotate: 2 }}
         >
           {/* Main circular container */}
-          <div className="relative w-16 h-16 rounded-full backdrop-blur-lg bg-white/10 dark:bg-black/20 border border-white/20 dark:border-gray-600/30 shadow-2xl overflow-hidden">
+          <div className="relative w-14 h-14 rounded-full backdrop-blur-lg bg-white/20 dark:bg-black/30 border border-white/30 dark:border-gray-600/40 shadow-xl overflow-hidden">
             
             {/* Progress ring */}
-            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 64 64">
+            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 56 56">
               <circle
-                cx="32"
-                cy="32"
-                r="28"
+                cx="28"
+                cy="28"
+                r="24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
                 className="text-gray-300/30 dark:text-gray-600/30"
               />
-              <motion.circle
-                cx="32"
-                cy="32"
-                r="28"
+              <circle
+                cx="28"
+                cy="28"
+                r="24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
-                className="text-blue-500 dark:text-blue-400"
+                className="text-blue-500 dark:text-blue-400 transition-all duration-300"
                 style={{
-                  strokeDasharray: `${2 * Math.PI * 28}`,
-                  strokeDashoffset: `${2 * Math.PI * 28 * (1 - scrollProgress / 100)}`
+                  strokeDasharray: `${2 * Math.PI * 24}`,
+                  strokeDashoffset: `${2 * Math.PI * 24 * (1 - scrollProgress / 100)}`
                 }}
-                transition={{ type: "spring", stiffness: 400, damping: 40 }}
               />
             </svg>
 
             {/* Button container */}
-            <div className="absolute inset-2 flex flex-col rounded-full overflow-hidden">
+            <div className="absolute inset-1 flex flex-col rounded-full">
               
               {/* Up button - top half */}
-              <motion.button
+              <button
                 onMouseDown={() => handleButtonPress('up')}
                 onMouseUp={handleButtonRelease}
                 onMouseLeave={handleButtonRelease}
@@ -254,30 +200,28 @@ const ScrollNavigator = () => {
                 }}
                 onTouchEnd={handleButtonRelease}
                 onDoubleClick={scrollToTop}
-                whileHover={{ backgroundColor: 'rgba(59, 130, 246, 0.3)' }}
-                whileTap={{ scale: 0.95 }}
                 disabled={isAtTop}
                 className={`
-                  flex-1 flex items-center justify-center transition-all duration-200 rounded-t-full
+                  flex-1 flex items-end justify-center pb-1 transition-all duration-200 rounded-t-full
                   ${isAtTop 
                     ? 'text-gray-400 cursor-not-allowed' 
-                    : 'text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400'
+                    : 'text-gray-700 dark:text-gray-200 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-500/10'
                   }
                 `}
                 aria-label="Scroll up"
               >
-                {isScrolling && !isDragging ? (
-                  <ArrowUp size={12} className="animate-bounce" />
+                {isScrolling ? (
+                  <ArrowUp size={11} className="animate-bounce" />
                 ) : (
-                  <ChevronUp size={12} />
+                  <ChevronUp size={11} />
                 )}
-              </motion.button>
+              </button>
               
               {/* Divider */}
-              <div className="h-px bg-gray-300/20 dark:bg-gray-600/20 mx-2"></div>
+              <div className="h-px bg-gray-300/30 dark:bg-gray-600/30 mx-3"></div>
               
               {/* Down button - bottom half */}
-              <motion.button
+              <button
                 onMouseDown={() => handleButtonPress('down')}
                 onMouseUp={handleButtonRelease}
                 onMouseLeave={handleButtonRelease}
@@ -287,48 +231,27 @@ const ScrollNavigator = () => {
                 }}
                 onTouchEnd={handleButtonRelease}
                 onDoubleClick={scrollToBottom}
-                whileHover={{ backgroundColor: 'rgba(59, 130, 246, 0.3)' }}
-                whileTap={{ scale: 0.95 }}
                 disabled={isAtBottom}
                 className={`
-                  flex-1 flex items-center justify-center transition-all duration-200 rounded-b-full
+                  flex-1 flex items-start justify-center pt-1 transition-all duration-200 rounded-b-full
                   ${isAtBottom 
                     ? 'text-gray-400 cursor-not-allowed' 
-                    : 'text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400'
+                    : 'text-gray-700 dark:text-gray-200 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-500/10'
                   }
                 `}
                 aria-label="Scroll down"
               >
-                {isScrolling && !isDragging ? (
-                  <ArrowDown size={12} className="animate-bounce" />
+                {isScrolling ? (
+                  <ArrowDown size={11} className="animate-bounce" />
                 ) : (
-                  <ChevronDown size={12} />
+                  <ChevronDown size={11} />
                 )}
-              </motion.button>
+              </button>
             </div>
 
-            {/* Drag indicator dot */}
-            {isDragging && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0 }}
-                className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"
-              />
-            )}
+            {/* Center dot indicator */}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-1 bg-gray-400/50 rounded-full"></div>
           </div>
-
-          {/* Floating tooltip */}
-          {isDragging && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="absolute -top-10 left-1/2 transform -translate-x-1/2 text-xs text-white bg-black/70 px-2 py-1 rounded whitespace-nowrap pointer-events-none"
-            >
-              Drag to move
-            </motion.div>
-          )}
         </motion.div>
       )}
     </AnimatePresence>
