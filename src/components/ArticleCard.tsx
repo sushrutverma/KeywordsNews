@@ -21,16 +21,23 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-
     if (showSummary) {
       document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
 
     return () => {
-      document.body.style.overflow = originalOverflow;
+      document.body.style.overflow = '';
     };
   }, [showSummary]);
+
+  useEffect(() => {
+    return () => {
+      // Clean up on unmount in case modal was open
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   if (!article) return null;
 
