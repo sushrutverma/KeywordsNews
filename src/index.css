@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/*——————————————————————————————————
+  1. Root variables (unchanged)
+——————————————————————————————————*/
 :root {
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --primary: #6366f1;
@@ -14,6 +17,9 @@
   --ripple-dark: rgba(129, 140, 248, 0.2);
 }
 
+/*——————————————————————————————————
+  2. html & body should allow scrolling and iOS momentum
+——————————————————————————————————*/
 html {
   -webkit-tap-highlight-color: transparent;
   height: -webkit-fill-available;
@@ -33,6 +39,11 @@ body {
 .dark body {
   background: #000000;
 }
+
+/*——————————————————————————————————
+  3. Glass card, elevation, FAB, ripple, etc. (unchanged)
+     (If you already have these, keep them exactly as-is.)
+——————————————————————————————————*/
 
 /* Glass card */
 .glass-card {
@@ -157,7 +168,10 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
   }
 }
 
-/* Main content scrolling */
+/*——————————————————————————————————
+  4. Main content scrolling (.main-content and .ios-scroll-fix)
+     Applied to the <motion.div> inside App.tsx
+——————————————————————————————————*/
 .main-content {
   -webkit-overflow-scrolling: touch;
   overflow-y: auto;
@@ -166,7 +180,21 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
   z-index: 1;
 }
 
-/* Pull to refresh container */
+/* For some iOS-specific quirks, you can also use .ios-scroll-fix 
+   wherever you want exact iOS momentum behavior */
+@supports (-webkit-touch-callout: none) {
+  .ios-scroll-fix {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+    height: 100%;
+    position: relative;
+  }
+}
+
+/*——————————————————————————————————
+  5. Pull-to-refresh container (.ptr-container)
+     Applied to <ReactPullToRefresh> in HomePage.tsx
+——————————————————————————————————*/
 .ptr-element {
   pointer-events: auto;
   position: relative;
@@ -179,6 +207,10 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
   height: 100%;
 }
 
+/*——————————————————————————————————
+  6. Article card touch handling & responsive text sizes
+     (unchanged if you already have these)
+——————————————————————————————————*/
 /* Article card touch handling */
 .article-card {
   -webkit-tap-highlight-color: transparent;
@@ -204,14 +236,4 @@ input, textarea, [contenteditable="true"], p, span, div[class*="text"], article 
 /* Safe area insets */
 .pb-safe-bottom {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-}
-
-/* iOS Safari viewport fix */
-@supports (-webkit-touch-callout: none) {
-  .ios-scroll-fix {
-    -webkit-overflow-scrolling: touch;
-    overflow-y: auto;
-    height: 100%;
-    position: relative;
-  }
 }
