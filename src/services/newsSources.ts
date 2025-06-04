@@ -126,9 +126,5 @@ export const news_sources: NewsSource[] = [
   url: "https://www.prabhatkhabar.com/rss.xml",
   category: "Regional"
 },
-{
-  name: "ABP Ananda",
-  url: "https://bengali.abplive.com/rss.xml",
-  category: "Regional"
-}
+
 ];
