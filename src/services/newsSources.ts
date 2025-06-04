@@ -109,5 +109,26 @@ export const news_sources: NewsSource[] = [
     name: "Dainik Bhaskar",
     url: "https://www.bhaskar.com/rss-national/",
     category: "Hindi News"
-  }
+  },
+  // Add these to your news_sources array
+{
+  name: "News18 Bihar",
+  url: "https://www.news18.com/rss/bihar.xml",
+  category: "Regional"
+},
+{
+  name: "Amar Ujala Bihar",
+  url: "https://www.amarujala.com/rss/bihar-news.xml", 
+  category: "Regional"
+},
+{
+  name: "Prabhat Khabar",
+  url: "https://www.prabhatkhabar.com/rss.xml",
+  category: "Regional"
+},
+{
+  name: "ABP Ananda",
+  url: "https://bengali.abplive.com/rss.xml",
+  category: "Regional"
+}
 ];
