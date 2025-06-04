@@ -1,331 +1,267 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { ExternalLink, Mic, MicOff, BookOpen, Bookmark, Trash2, AlertCircle, MessageSquare } from 'lucide-react';
-import { useNews } from '../contexts/NewsContext';
+import React, { useState, useEffect, useRef } from 'react';
+import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { Bookmark, Share2, ExternalLink, Sparkles, X } from 'lucide-react';
 import { Article } from '../types';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useNews } from '../contexts/NewsContext';
 import { aiService } from '../services/aiService';
 
 interface ArticleCardProps {
   article: Article;
-  index: number;
-  keyword: string;
+  keyword?: string;
 }
 
-const ArticleCard: React.FC<ArticleCardProps> = ({ article, index, keyword }) => {
-  const { user } = useAuth();
-  const { speakText, stopSpeaking, speakingArticleId, saveArticle, unsaveArticle, savedArticles, deleteArticleHistory, articleHistories } = useNews();
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
+  const { savedArticles, saveArticle, removeFromSaved } = useNews();
   const [showSummary, setShowSummary] = useState(false);
-  const [summary, setSummary] = useState<string | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-
-  const summaryButtonRef = useRef<HTMLButtonElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setIsSpeaking(speakingArticleId === article.id);
-  }, [speakingArticleId, article.id]);
-
-  useEffect(() => {
-    if (user) {
-      setIsSaved(savedArticles.some(sa => sa.article_id === article.id && sa.user_id === user.id));
-    } else {
-      setIsSaved(false);
-    }
-  }, [savedArticles, article.id, user]);
-  
-  const isViewed = useMemo(() => {
-    if (!user) return false;
-    return articleHistories.some(ah => ah.article_id === article.id && ah.user_id === user?.id && ah.is_viewed);
-  }, [articleHistories, article.id, user]);
-
-  const handleSpeak = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (isSpeaking) {
-      stopSpeaking();
-    } else {
-      speakText(article.title + ". " + (article.description || ""), article.id);
-    }
-  };
-
-  const formatContent = (content: string | null | undefined): string => {
-    if (!content) return 'Content not available.';
-    try {
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = content;
-      // Further clean up: remove script and style tags
-      Array.from(tempDiv.querySelectorAll('script, style')).forEach(el => el.remove());
-      return tempDiv.textContent || tempDiv.innerText || 'Content not available.';
-    } catch (error) {
-      console.error("Error formatting content:", error);
-      return content || 'Content not available.'; // Fallback to original content if error
-    }
-  };
-
-  const highlightKeyword = (text: string | null | undefined, keyword: string): React.ReactNode => {
-    if (!text) return text;
-    if (!keyword) return text;
-    try {
-      const parts = text.split(new RegExp(`(${keyword})`, 'gi'));
-      return (
-        <>
-          {parts.map((part, i) =>
-            part.toLowerCase() === keyword.toLowerCase() ? (
-              <span key={i} className="bg-yellow-200 dark:bg-yellow-600">
-                {part}
-              </span>
-            ) : (
-              part
-            )
-          )}
-        </>
-      );
-    } catch (error) {
-      console.warn("Error highlighting keyword:", error);
-      return text; // Fallback to original text if regex is invalid
-    }
-  };
-  
-  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (summaryButtonRef.current && summaryButtonRef.current.contains(e.target as Node)) {
-      // Click was on the summary button, don't open the article
-      return;
-    }
-    if (article.link) {
-      window.open(article.link, '_blank', 'noopener,noreferrer');
-      if (user && article.id) {
-        // Log view history
-        supabase
-          .from('article_history')
-          .upsert({ 
-            user_id: user.id, 
-            article_id: article.id,
-            is_viewed: true,
-            viewed_at: new Date().toISOString(),
-            keyword: keyword || undefined
-          }, { onConflict: 'user_id, article_id' })
-          .then(({ error }) => {
-            if (error) console.error('Error logging view history:', error);
-          });
-      }
-    }
-  };
-
-  const handleSaveToggle = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (!user || !article.id) {
-      alert("Please log in to save articles.");
-      return;
-    }
-    if (isSaved) {
-      await unsaveArticle(article.id, user.id);
-    } else {
-      // Pass the full article object for saving, ensure it matches SavedArticleInsert type
-      const articleToSave = {
-        article_id: article.id,
-        user_id: user.id,
-        title: article.title,
-        link: article.link,
-        description: article.description,
-        pubDate: article.pubDate,
-        source_id: article.source?.id || article.source_id, // Handle potential missing source object
-        source_name: article.source?.name || article.source_name,
-        image_url: article.imageUrl,
-        saved_at: new Date().toISOString(),
-        keyword: keyword || undefined
-      };
-      await saveArticle(articleToSave);
-    }
-  };
-  
-  const handleDeleteHistory = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (user && article.id) {
-      const success = await deleteArticleHistory(article.id, user.id);
-      if (success) {
-        // Optionally, provide user feedback
-        console.log("Article history deleted successfully");
-      }
-    }
-  };
-
-  const handleSummaryClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation(); // Prevent card click
-    if (showSummary) {
-      setShowSummary(false);
-      return;
-    }
-
-    setShowSummary(true);
-    if (summary) return; // Already have summary
-
-    setIsSummarizing(true);
-    setSummaryError(null);
-    try {
-      const articleTextToSummarize = `${article.title}. ${formatContent(article.description || article.content)}`;
-      const { summary: generatedSummary } = await aiService.summarize(articleTextToSummarize);
-      setSummary(generatedSummary);
-    } catch (error) {
-      console.error("Error summarizing article:", error);
-      setSummaryError(error instanceof Error ? error.message : "Failed to generate summary.");
-      setSummary(null); // Clear any previous summary
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
+  const [summary, setSummary] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (showSummary) {
-      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+      document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = 'auto';
+      document.body.style.overflow = '';
     }
-    // Cleanup function to restore scrolling when component unmounts or showSummary changes
+
     return () => {
-      document.body.style.overflow = 'auto';
+      document.body.style.overflow = '';
     };
   }, [showSummary]);
 
+  useEffect(() => {
+    return () => {
+      // Clean up on unmount in case modal was open
+      document.body.style.overflow = '';
+    };
+  }, []);
 
-  const formattedDate = article.pubDate
-    ? new Date(article.pubDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : 'Date not available';
+  if (!article) return null;
+
+  const isBookmarked = savedArticles?.some((a) => a.id === article.id) || false;
+
+  const formatContent = (content: string) => {
+    try {
+      const stripped = content.replace(/<[^>]*>/g, '');
+      const decoded = stripped.replace(/&[^;]+;/g, (match) => {
+        const div = document.createElement('div');
+        div.innerHTML = match;
+        return div.textContent || div.innerText || match;
+      });
+      return decoded;
+    } catch {
+      return content;
+    }
+  };
+
+  const highlightKeyword = (text: string, keyword?: string) => {
+    if (!keyword || !text) return text;
+    try {
+      const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      return text.split(regex).map((part, i) =>
+        regex.test(part) ? (
+          <span key={i} className="bg-primary/20 dark:bg-primary-dark/20">{part}</span>
+        ) : (
+          part
+        )
+      );
+    } catch {
+      return text;
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      if (navigator.share && navigator.canShare) {
+        await navigator.share({
+          title: article.title || 'News Article',
+          text: article.title || 'Check out this article',
+          url: article.link,
+        });
+      } else {
+        await navigator.clipboard.writeText(article.link || '');
+        console.log('Link copied to clipboard!');
+      }
+    } catch (err) {
+      console.error('Error sharing:', err);
+    }
+  };
+
+  const handleBookmarkToggle = () => {
+    if (!article?.id) return;
+    isBookmarked ? removeFromSaved(article.id) : saveArticle(article);
+  };
+
+  const handleSummarize = async () => {
+    if (!showSummary) {
+      if (!article.content) {
+        setSummary('No content available to summarize.');
+        setShowSummary(true);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await aiService.summarize(article.content);
+        setSummary(result?.summary || 'No summary available.');
+      } catch {
+        setError('Failed to generate summary.');
+      } finally {
+        setIsLoading(false);
+        setShowSummary(true);
+      }
+    } else {
+      setShowSummary(false);
+    }
+  };
+
+  const handleModalBackdropClick = (e: React.MouseEvent | React.TouchEvent) => {
+    if (e.target === e.currentTarget) {
+      setShowSummary(false);
+    }
+  };
+
+  const formatDate = (date: string | Date) => {
+    try {
+      const d = new Date(date);
+      return isNaN(d.getTime()) ? 'Unknown date' : format(d, 'MMM dd, yyyy');
+    } catch {
+      return 'Unknown date';
+    }
+  };
+
+  const formattedContent = formatContent(article.content || '');
 
   return (
     <motion.div
-      ref={cardRef}
-      layout
-      initial={{ opacity: 0, y: 50 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -50 }}
-      transition={{ duration: 0.3, ease: "easeInOut" }}
-      className={`bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden ${isSpeaking ? 'ring-2 ring-blue-500' : ''} ${isViewed ? 'opacity-70 dark:opacity-60' : ''} touch-pan-y`}
-      onClick={handleCardClick}
-      style={{ transformOrigin: 'top center' }}
+      transition={{ duration: 0.3 }}
+      className="article-card glass-card rounded-xl overflow-hidden mb-6 relative"
+      style={{ touchAction: 'pan-y' }}
     >
-      {article.imageUrl && (
-        <img
-          src={article.imageUrl}
-          alt={article.title}
-          className="w-full h-48 object-cover"
-          onError={(e) => (e.currentTarget.style.display = 'none')}
-        />
+      {article.image && (
+        <div className="w-full h-48 overflow-hidden">
+          <img
+            src={article.image}
+            alt={article.title || 'Article image'}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
       )}
-      <div className="p-4">
-        <div className="flex justify-between items-start mb-2">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {article.source?.name || article.source_name || 'Unknown Source'} - {formattedDate}
+
+      <div className="p-6">
+        <div className="flex items-center mb-3">
+          <span className="text-xs font-medium px-3 py-1 rounded-full bg-primary/10 text-primary dark:bg-primary-dark/10 dark:text-primary-dark">
+            {article.source || 'Unknown'} • {formatDate(article.pubDate)}
           </span>
-          <div className="flex space-x-2">
-            {user && articleHistories.some(ah => ah.article_id === article.id && ah.user_id === user?.id && ah.is_viewed) && (
-              <button
-                onClick={handleDeleteHistory}
-                title="Remove from viewed history"
-                className="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-            <button
-              onClick={handleSaveToggle}
-              title={isSaved ? 'Unsave Article' : 'Save Article'}
-              className={`p-1 ${isSaved ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400'} transition-colors`}
-            >
-              <Bookmark size={16} filled={isSaved} />
-            </button>
-          </div>
         </div>
 
-        <h3 className="text-lg font-semibold mb-2 text-gray-800 dark:text-gray-100">
-          {highlightKeyword(article.title, keyword)}
-        </h3>
-        
-        {article.description && (
-          <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-            {highlightKeyword(formatContent(article.description), keyword)}
+        <Link to={`/article/${article.id}`}>
+          <h2 className="text-xl font-playfair font-bold mb-3 text-primary dark:text-primary-dark">
+            {highlightKeyword(article.title || 'Untitled', keyword)}
+          </h2>
+        </Link>
+
+        {formattedContent && (
+          <p className="font-source-serif text-gray-700 dark:text-gray-300 mb-4 line-clamp-3">
+            {highlightKeyword(formattedContent, keyword)}
           </p>
         )}
 
-        <div className="flex items-center justify-between mt-3">
-          <div className="flex space-x-2">
+        <div className="flex justify-between items-center pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={`/article/${article.id}`}
+              className="fab whitespace-nowrap px-4 py-2 rounded-full text-white text-sm font-medium flex items-center"
+            >
+              Read more <ExternalLink size={14} className="ml-2" />
+            </Link>
+
             <button
-              onClick={handleSpeak}
-              title={isSpeaking ? 'Stop Speaking' : 'Read Aloud'}
-              className={`p-2 rounded-full transition-colors ${
-                isSpeaking 
-                  ? 'bg-red-500 text-white hover:bg-red-600' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              onClick={handleSummarize}
+              disabled={isLoading}
+              className="whitespace-nowrap px-4 py-2 rounded-full bg-accent/10 text-accent dark:bg-accent-dark/10 dark:text-accent-dark text-sm font-medium flex items-center disabled:opacity-50"
+            >
+              <Sparkles size={14} className="mr-2" />
+              {isLoading ? 'Loading...' : 'AI Summary'}
+            </button>
+          </div>
+
+          <div className="flex space-x-2">
+            <button onClick={handleShare} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <Share2 size={18} className="text-gray-600 dark:text-gray-400" />
+            </button>
+
+            <button
+              onClick={handleBookmarkToggle}
+              className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                isBookmarked ? 'text-accent dark:text-accent-dark' : 'text-gray-600 dark:text-gray-400'
               }`}
             >
-              {isSpeaking ? <MicOff size={18} /> : <Mic size={18} />}
-            </button>
-            {article.link && (
-              <a
-                href={article.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                title="Open Article in New Tab"
-                className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center"
-              >
-                <ExternalLink size={18} />
-              </a>
-            )}
-            <button
-              ref={summaryButtonRef}
-              onClick={handleSummaryClick}
-              title="Summarize Article"
-              className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center"
-            >
-              <MessageSquare size={18} />
+              <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
             </button>
           </div>
         </div>
       </div>
 
-      {showSummary && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowSummary(false)}
-        >
+      <AnimatePresence>
+        {showSummary && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="text-xl font-semibold text-gray-800 dark:text-gray-100">Article Summary</h4>
-              <button 
-                onClick={() => setShowSummary(false)} 
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                &times;
-              </button>
-            </div>
-            {isSummarizing && <div className="text-center py-4 text-gray-600 dark:text-gray-300">Generating summary...</div>}
-            {summaryError && (
-              <div className="text-center py-4 text-red-500 dark:text-red-400 flex items-center justify-center">
-                <AlertCircle size={20} className="mr-2"/> {summaryError}
+            <motion.div
+              className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+              onClick={handleModalBackdropClick}
+              onTouchEnd={handleModalBackdropClick}
+            />
+            <motion.div
+              ref={modalRef}
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="glass-card relative max-w-lg w-full p-6 rounded-2xl max-h-[80vh] overflow-y-auto touch-pan-y overscroll-contain"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center">
+                  <Sparkles className="text-accent dark:text-accent-dark mr-2" size={20} />
+                  <h3 className="text-lg font-semibold gradient-text">AI Summary</h3>
+                </div>
+                <button
+                  onClick={() => setShowSummary(false)}
+                  className="p-2 rounded-full hover:bg-gray-200/50 dark:hover:bg-gray-700/50"
+                >
+                  <X size={20} className="text-gray-500 dark:text-gray-400" />
+                </button>
               </div>
-            )}
-            {summary && !isSummarizing && (
-              <div className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap article-summary-content">
-                {summary}
-              </div>
-            )}
+
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent dark:border-accent-dark"></div>
+                  <span className="ml-3 text-gray-600 dark:text-gray-400">Generating summary...</span>
+                </div>
+              ) : error ? (
+                <div className="text-red-500 dark:text-red-400 text-center py-8">{error}</div>
+              ) : (
+                <div className="prose dark:prose-invert max-w-none">
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">{summary}</p>
+                </div>
+              )}
+            </motion.div>
           </motion.div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
