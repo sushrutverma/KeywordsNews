@@ -1,213 +1,269 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { Bookmark, Share2, ExternalLink, Sparkles, X } from 'lucide-react';
+import { Article } from '../types';
+import { useNews } from '../contexts/NewsContext';
+import { aiService } from '../services/aiService';
 
-const SimpleScrollNavigator = () => {
-  const [isUpPressed, setIsUpPressed] = useState(false);
-  const [isDownPressed, setIsDownPressed] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
-  const [showFeedback, setShowFeedback] = useState('');
-  const scrollIntervalRef = useRef(null);
-  const tapTimeoutRef = useRef(null);
-  const tapCountRef = useRef(0);
-  const longPressTimeoutRef = useRef(null);
-  const feedbackTimeoutRef = useRef(null);
+interface ArticleCardProps {
+  article: Article;
+  keyword?: string;
+}
 
-  const showFeedbackMessage = useCallback((message) => {
-    setShowFeedback(message);
-    if (feedbackTimeoutRef.current) {
-      clearTimeout(feedbackTimeoutRef.current);
+const ArticleCard: React.FC<ArticleCardProps> = ({ article, keyword }) => {
+  const { savedArticles, saveArticle, removeFromSaved } = useNews();
+  const [showSummary, setShowSummary] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showSummary) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
-    feedbackTimeoutRef.current = setTimeout(() => {
-      setShowFeedback('');
-    }, 1500);
-  }, []);
 
-  const scrollToTop = useCallback(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showFeedbackMessage('Scrolled to top');
-  }, [showFeedbackMessage]);
-
-  const scrollToBottom = useCallback(() => {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-    showFeedbackMessage('Scrolled to bottom');
-  }, [showFeedbackMessage]);
-
-  const pageJump = useCallback((direction) => {
-    const jumpAmount = window.innerHeight * 0.8; // 80% of viewport height
-    const scrollAmount = direction === 'up' ? -jumpAmount : jumpAmount;
-    window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-    showFeedbackMessage(`Page ${direction === 'up' ? 'up' : 'down'}`);
-  }, [showFeedbackMessage]);
-
-  const handleTap = useCallback((direction) => {
-    tapCountRef.current += 1;
-    
-    if (tapCountRef.current === 1) {
-      // Single tap - page jump
-      tapTimeoutRef.current = setTimeout(() => {
-        if (tapCountRef.current === 1) {
-          pageJump(direction);
-        }
-        tapCountRef.current = 0;
-      }, 300);
-    } else if (tapCountRef.current === 2) {
-      // Double tap - scroll to top/bottom
-      if (tapTimeoutRef.current) {
-        clearTimeout(tapTimeoutRef.current);
-      }
-      direction === 'up' ? scrollToTop() : scrollToBottom();
-      tapCountRef.current = 0;
-    }
-  }, [pageJump, scrollToTop, scrollToBottom]);
-
-  const startScrolling = useCallback((direction) => {
-    if (scrollIntervalRef.current) return;
-    
-    setIsScrolling(true);
-    const scrollAmount = direction === 'up' ? -16 : 16; // Increased from 8 to 16 (2x speed)
-    
-    const scroll = () => {
-      window.scrollBy({ top: scrollAmount, behavior: 'auto' });
+    return () => {
+      document.body.style.overflow = '';
     };
-    
-    // Initial scroll
-    scroll();
-    
-    // Continue scrolling
-    scrollIntervalRef.current = setInterval(scroll, 16); // ~60fps
-  }, []);
+  }, [showSummary]);
 
-  const stopScrolling = useCallback(() => {
-    if (scrollIntervalRef.current) {
-      clearInterval(scrollIntervalRef.current);
-      scrollIntervalRef.current = null;
-    }
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-    setIsScrolling(false);
-    setIsUpPressed(false);
-    setIsDownPressed(false);
-  }, []);
-
-  const handlePointerDown = useCallback((direction) => {
-    // Set pressed state immediately
-    direction === 'up' ? setIsUpPressed(true) : setIsDownPressed(true);
-    
-    // Start long press timer for continuous scrolling
-    longPressTimeoutRef.current = setTimeout(() => {
-      startScrolling(direction);
-    }, 500); // 500ms for long press
-  }, [startScrolling]);
-
-  const handlePointerUp = useCallback((direction) => {
-    if (longPressTimeoutRef.current) {
-      // Short press - handle as tap
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-      
-      if (!isScrolling) {
-        handleTap(direction);
-      }
-    }
-    
-    stopScrolling();
-  }, [isScrolling, handleTap, stopScrolling]);
-
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (scrollIntervalRef.current) {
-        clearInterval(scrollIntervalRef.current);
-      }
-      if (tapTimeoutRef.current) {
-        clearTimeout(tapTimeoutRef.current);
-      }
-      if (longPressTimeoutRef.current) {
-        clearTimeout(longPressTimeoutRef.current);
-      }
-      if (feedbackTimeoutRef.current) {
-        clearTimeout(feedbackTimeoutRef.current);
-      }
+      // Clean up on unmount in case modal was open
+      document.body.style.overflow = '';
     };
   }, []);
 
-  const isAnyButtonPressed = isUpPressed || isDownPressed;
+  if (!article) return null;
+
+  const isBookmarked = savedArticles?.some((a) => a.id === article.id) || false;
+
+  const formatContent = (content: string) => {
+    try {
+      const stripped = content.replace(/<[^>]*>/g, '');
+      const decoded = stripped.replace(/&[^;]+;/g, (match) => {
+        const div = document.createElement('div');
+        div.innerHTML = match;
+        return div.textContent || div.innerText || match;
+      });
+      return decoded;
+    } catch {
+      return content;
+    }
+  };
+
+  const highlightKeyword = (text: string, keyword?: string) => {
+    if (!keyword || !text) return text;
+    try {
+      const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      return text.split(regex).map((part, i) =>
+        regex.test(part) ? (
+          <span key={i} className="bg-primary/20 dark:bg-primary-dark/20">{part}</span>
+        ) : (
+          part
+        )
+      );
+    } catch {
+      return text;
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      if (navigator.share && navigator.canShare) {
+        await navigator.share({
+          title: article.title || 'News Article',
+          text: article.title || 'Check out this article',
+          url: article.link,
+        });
+      } else {
+        await navigator.clipboard.writeText(article.link || '');
+        console.log('Link copied to clipboard!');
+      }
+    } catch (err) {
+      console.error('Error sharing:', err);
+    }
+  };
+
+  const handleBookmarkToggle = () => {
+    if (!article?.id) return;
+    isBookmarked ? removeFromSaved(article.id) : saveArticle(article);
+  };
+
+  const handleSummarize = async () => {
+    if (!showSummary) {
+      if (!article.content) {
+        setSummary('No content available to summarize.');
+        setShowSummary(true);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await aiService.summarize(article.content);
+        setSummary(result?.summary || 'No summary available.');
+      } catch {
+        setError('Failed to generate summary.');
+      } finally {
+        setIsLoading(false);
+        setShowSummary(true);
+      }
+    } else {
+      setShowSummary(false);
+    }
+  };
+
+  const handleModalBackdropClick = (e: React.MouseEvent | React.TouchEvent) => {
+    if (e.target === e.currentTarget) {
+      setShowSummary(false);
+    }
+  };
+
+  const formatDate = (date: string | Date) => {
+    try {
+      const d = new Date(date);
+      return isNaN(d.getTime()) ? 'Unknown date' : format(d, 'MMM dd, yyyy');
+    } catch {
+      return 'Unknown date';
+    }
+  };
+
+  const formattedContent = formatContent(article.content || '');
 
   return (
-    <div className="fixed right-6 top-1/2 transform -translate-y-1/2 z-[1000] select-none">
-      {/* Feedback Message */}
-      {showFeedback && (
-        <motion.div
-          initial={{ opacity: 0, x: 20, scale: 0.8 }}
-          animate={{ opacity: 1, x: 0, scale: 1 }}
-          exit={{ opacity: 0, x: 20, scale: 0.8 }}
-          className="absolute right-20 top-1/2 transform -translate-y-1/2 bg-gray-900/90 text-white px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap backdrop-blur-sm"
-        >
-          {showFeedback}
-        </motion.div>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="article-card glass-card rounded-xl overflow-hidden mb-6 relative"
+      style={{ touchAction: 'pan-y' }}
+    >
+      {article.image && (
+        <div className="w-full h-48 overflow-hidden">
+          <img
+            src={article.image}
+            alt={article.title || 'Article image'}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
       )}
 
-      <motion.div
-        initial={{ opacity: 0.7, x: 20 }}
-        animate={{ 
-          opacity: isAnyButtonPressed ? 0.4 : 0.7,
-          x: 0 
-        }}
-        transition={{ duration: 0.2 }}
-        role="group"
-        aria-label="Scroll Navigator"
-      >
-        <div className="flex flex-col gap-3">
-          {/* Up Button */}
-          <motion.button
-            className={`
-              w-16 h-16 rounded-full backdrop-blur-sm border-2 flex items-center justify-center
-              transition-all duration-200 touch-none relative
-              ${isUpPressed 
-                ? 'bg-blue-500/80 border-blue-400 text-white shadow-lg' 
-                : 'bg-white/90 border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400'
-              }
-            `}
-            onPointerDown={() => handlePointerDown('up')}
-            onPointerUp={() => handlePointerUp('up')}
-            onPointerLeave={stopScrolling}
-            onPointerCancel={stopScrolling}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="Scroll Up (Tap: Page Up, Double-tap: Top, Hold: Continuous)"
-            title="Tap: Page Up | Double-tap: To Top | Hold: Continuous Scroll"
-          >
-            <ChevronUp size={28} strokeWidth={2.5} />
-          </motion.button>
-
-          {/* Down Button */}
-          <motion.button
-            className={`
-              w-16 h-16 rounded-full backdrop-blur-sm border-2 flex items-center justify-center
-              transition-all duration-200 touch-none relative
-              ${isDownPressed 
-                ? 'bg-blue-500/80 border-blue-400 text-white shadow-lg' 
-                : 'bg-white/90 border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400'
-              }
-            `}
-            onPointerDown={() => handlePointerDown('down')}
-            onPointerUp={() => handlePointerUp('down')}
-            onPointerLeave={stopScrolling}
-            onPointerCancel={stopScrolling}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="Scroll Down (Tap: Page Down, Double-tap: Bottom, Hold: Continuous)"
-            title="Tap: Page Down | Double-tap: To Bottom | Hold: Continuous Scroll"
-          >
-            <ChevronDown size={28} strokeWidth={2.5} />
-          </motion.button>
+      <div className="p-6">
+        <div className="flex items-center mb-3">
+          <span className="text-xs font-medium px-3 py-1 rounded-full bg-primary/10 text-primary dark:bg-primary-dark/10 dark:text-primary-dark">
+            {article.source || 'Unknown'} • {formatDate(article.pubDate)}
+          </span>
         </div>
-      </motion.div>
-    </div>
+
+        <Link to={`/article/${article.id}`}>
+          <h2 className="text-xl font-playfair font-bold mb-3 text-primary dark:text-primary-dark">
+            {highlightKeyword(article.title || 'Untitled', keyword)}
+          </h2>
+        </Link>
+
+        {formattedContent && (
+          <p className="font-source-serif text-gray-700 dark:text-gray-300 mb-4 line-clamp-3">
+            {highlightKeyword(formattedContent, keyword)}
+          </p>
+        )}
+
+        <div className="flex justify-between items-center pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={`/article/${article.id}`}
+              className="fab whitespace-nowrap px-4 py-2 rounded-full text-white text-sm font-medium flex items-center"
+            >
+              Read more <ExternalLink size={14} className="ml-2" />
+            </Link>
+
+            <button
+              onClick={handleSummarize}
+              disabled={isLoading}
+              className="whitespace-nowrap px-4 py-2 rounded-full bg-accent/10 text-accent dark:bg-accent-dark/10 dark:text-accent-dark text-sm font-medium flex items-center disabled:opacity-50"
+            >
+              <Sparkles size={14} className="mr-2" />
+              {isLoading ? 'Loading...' : 'AI Summary'}
+            </button>
+          </div>
+
+          <div className="flex space-x-2">
+            <button onClick={handleShare} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <Share2 size={18} className="text-gray-600 dark:text-gray-400" />
+            </button>
+
+            <button
+              onClick={handleBookmarkToggle}
+              className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                isBookmarked ? 'text-accent dark:text-accent-dark' : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showSummary && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+              onClick={handleModalBackdropClick}
+              onTouchEnd={handleModalBackdropClick}
+            />
+            <motion.div
+              ref={modalRef}
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="glass-card relative max-w-lg w-full p-6 rounded-2xl max-h-[80vh] overflow-y-auto touch-pan-y overscroll-contain"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center">
+                  <Sparkles className="text-accent dark:text-accent-dark mr-2" size={20} />
+                  <h3 className="text-lg font-semibold gradient-text">AI Summary</h3>
+                </div>
+                <button
+                  onClick={() => setShowSummary(false)}
+                  className="p-2 rounded-full hover:bg-gray-200/50 dark:hover:bg-gray-700/50"
+                >
+                  <X size={20} className="text-gray-500 dark:text-gray-400" />
+                </button>
+              </div>
+
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent dark:border-accent-dark"></div>
+                  <span className="ml-3 text-gray-600 dark:text-gray-400">Generating summary...</span>
+                </div>
+              ) : error ? (
+                <div className="text-red-500 dark:text-red-400 text-center py-8">{error}</div>
+              ) : (
+                <div className="prose dark:prose-invert max-w-none">
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">{summary}</p>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
-export default SimpleScrollNavigator;
+export default ArticleCard;
