@@ -15,8 +15,8 @@ const ScrollNavigator = () => {
 
   // Motion values for vertical dragging
   const y = useMotionValue(0);
-  const opacity = useTransform(y, [-100, 0, 100], [0.9, 0.3, 0.9]);
-  const scale = useTransform(y, [-50, 0, 50], [1.1, 1, 1.1]);
+  const opacity = useTransform(y, [-100, 0, 100], [0, 0, 0]); // Always invisible
+  const scale = useTransform(y, [-50, 0, 50], [1, 1, 1]); // No scaling
 
   // Update scroll state
   const updateScrollState = useCallback(() => {
@@ -224,18 +224,16 @@ const ScrollNavigator = () => {
     };
   }, [longPressTimer]);
 
-  const currentOpacity = isTouched || isDragging ? 0.9 : 0.2;
-
   return (
     <motion.div
-      initial={{ opacity: 0.2, x: 20 }}
-      animate={{ opacity: currentOpacity, x: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 0 }} // Always invisible
       style={{ 
         y,
-        opacity: isDragging ? opacity : currentOpacity,
-        scale: isDragging ? scale : 1
+        opacity: 0, // Force invisible
+        scale: 1 // No scaling
       }}
-      className="fixed right-3 top-1/2 transform -translate-y-1/2 z-50 touch-none select-none cursor-grab active:cursor-grabbing"
+      className="fixed right-3 top-1/2 transform -translate-y-1/2 z-50 touch-none select-none cursor-default w-12 h-20"
       drag="y"
       dragConstraints={{ top: -150, bottom: 150 }}
       dragElastic={0.1}
@@ -249,73 +247,12 @@ const ScrollNavigator = () => {
       onMouseUp={handleTouchEnd}
       onMouseLeave={handleTouchEnd}
       onDoubleClick={handleDoubleClick}
-      whileHover={{ opacity: 0.8, scale: 1.05 }}
-      transition={{ opacity: { duration: 0.3 }, scale: { duration: 0.2 } }}
     >
-      {/* Main container */}
-      <div className="relative w-12 h-20 rounded-full backdrop-blur-md bg-gradient-to-b from-white/10 to-black/10 dark:from-black/20 dark:to-white/10 border border-white/20 dark:border-gray-600/30 shadow-2xl overflow-hidden">
-        
-        {/* Progress indicator */}
-        <div className="absolute left-1 top-2 bottom-2 w-1 bg-gray-300/20 dark:bg-gray-600/20 rounded-full overflow-hidden">
-          <motion.div
-            className="w-full bg-blue-500 dark:bg-blue-400 rounded-full"
-            style={{ height: `${scrollProgress}%` }}
-            transition={{ type: "spring", stiffness: 400, damping: 40 }}
-          />
-        </div>
-
-        {/* Content area */}
-        <div className="absolute inset-2 flex flex-col items-center justify-center">
-          
-          {/* Direction indicator */}
-          <div className="flex flex-col items-center justify-center h-full">
-            {isScrolling && scrollDirection === 'up' && (
-              <ArrowUp size={14} className="text-blue-500 animate-bounce mb-1" />
-            )}
-            
-            {scrollProgress < 50 ? (
-              <ChevronDown size={16} className="text-gray-600 dark:text-gray-400" />
-            ) : (
-              <ChevronUp size={16} className="text-gray-600 dark:text-gray-400" />
-            )}
-            
-            {isScrolling && scrollDirection === 'down' && (
-              <ArrowDown size={14} className="text-blue-500 animate-bounce mt-1" />
-            )}
-          </div>
-
-          {/* Status dots */}
-          <div className="absolute bottom-1 flex gap-1">
-            <div className={`w-1 h-1 rounded-full transition-colors duration-200 ${isAtTop ? 'bg-green-500' : 'bg-gray-400/50'}`}></div>
-            <div className={`w-1 h-1 rounded-full transition-colors duration-200 ${isAtBottom ? 'bg-red-500' : 'bg-gray-400/50'}`}></div>
-          </div>
-        </div>
-
-        {/* Drag indicator */}
-        {isDragging && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="absolute -left-8 top-1/2 transform -translate-y-1/2 text-xs text-white bg-black/70 px-2 py-1 rounded whitespace-nowrap pointer-events-none"
-          >
-            Drag to scroll
-          </motion.div>
-        )}
-
-        {/* Touch hint */}
-        {isTouched && !isDragging && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute -right-16 top-1/2 transform -translate-y-1/2 text-xs text-white bg-black/70 px-2 py-1 rounded whitespace-nowrap pointer-events-none"
-          >
-            Hold or double-tap
-          </motion.div>
-        )}
+      {/* Invisible container - maintains hit area but shows nothing */}
+      <div className="relative w-12 h-20 opacity-0">
+        {/* All visual elements removed but structure maintained for functionality */}
       </div>
     </motion.div>
   );
 };
 
-export default ScrollNavigator;
