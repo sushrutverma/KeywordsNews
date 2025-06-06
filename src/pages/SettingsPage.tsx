@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Moon, Sun, Trash2, RefreshCw, Globe } from 'lucide-react';
+import { Settings, Moon, Sun, Trash2, RefreshCw, Globe, ExternalLink } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSearchHistory } from '../contexts/SearchHistoryContext';
 import { useNews } from '../contexts/NewsContext';
@@ -32,7 +32,7 @@ const SettingsPage = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 {theme === 'dark' ? (
-                  <Moon className="text-indigo-600 dark:text-indigo-400 mr-3\" size={20} />
+                  <Moon className="text-indigo-600 dark:text-indigo-400 mr-3" size={20} />
                 ) : (
                   <Sun className="text-indigo-600 dark:text-indigo-400 mr-3" size={20} />
                 )}
@@ -127,12 +127,26 @@ const SettingsPage = () => {
             <h3 className="font-bold text-xl mb-1 flex items-center">
               Keywords <span className="ml-2 text-xs px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 rounded-full">v1.0.0</span>
             </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-2">
+            <p className="text-gray-600 dark:text-gray-400 mb-3">
               A modern news aggregator that helps you follow topics that matter to you.
             </p>
-            <p className="text-sm text-gray-500 dark:text-gray-500">
-              © 2025 Keywords. All rights reserved.
-            </p>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+              <p className="text-sm text-gray-500 dark:text-gray-500 mb-2">
+                This app is part of Sushrut Verma AI Project
+              </p>
+              <a
+                href="https://www.linkedin.com/in/sushrutverma/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+              >
+                Connect on LinkedIn
+                <ExternalLink size={14} className="ml-1" />
+              </a>
+              <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+                © 2025 Keywords. All rights reserved.
+              </p>
+            </div>
           </div>
         </div>
       </motion.div>
