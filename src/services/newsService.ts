@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { Article } from '../types';
 import { news_sources } from './newsSources';
 
-// Custom type for RSS Parser
 type CustomItem = {
   title: string;
   link: string;
@@ -40,52 +39,49 @@ const parser = new Parser<any, CustomItem>({
   },
 });
 
-// Local storage cache keys
+// Reduced cache duration for fresher content
 const CACHE_KEY = 'news_cache';
 const CACHE_TIMESTAMP_KEY = 'news_cache_timestamp';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
-// Function to sanitize XML content
+// Optimized CORS proxies - fastest first
+const CORS_PROXIES = [
+  'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url=',
+];
+
 const sanitizeXml = (xml: string): string => {
   return xml
     .replace(/&(?![a-zA-Z0-9#]{1,7};)/g, '&amp;')
     .replace(/&amp;amp;/g, '&amp;');
 };
 
-// Simple CORS proxy list - keeping the ones that work most reliably
-const CORS_PROXIES = [
-  'https://api.allorigins.win/raw?url=',
-  'https://corsproxy.io/?',
-  'https://proxy.cors.sh/',
-];
-
-// Function to fetch RSS feed from a source
+// Optimized RSS fetch with faster timeouts and parallel proxy attempts
 const fetchRssFeed = async (sourceUrl: string, sourceName: string): Promise<Article[]> => {
   console.log(`Fetching from ${sourceName}...`);
   
-  // Try each CORS proxy
-  for (const proxyUrl of CORS_PROXIES) {
+  // Try all proxies in parallel instead of sequential
+  const proxyPromises = CORS_PROXIES.map(async (proxyUrl) => {
     try {
       const response = await axios.get(`${proxyUrl}${encodeURIComponent(sourceUrl)}`, {
-        timeout: 8000,
+        timeout: 4000, // Reduced timeout
         headers: {
           'Accept': 'application/rss+xml, application/xml, text/xml, */*',
         }
       });
       
       if (!response.data) {
-        continue; // Try next proxy
+        throw new Error('No data received');
       }
       
       const sanitizedXml = sanitizeXml(String(response.data));
       const feed = await parser.parseString(sanitizedXml);
       
-      if (!feed.items) {
-        continue; // Try next proxy
+      if (!feed.items || feed.items.length === 0) {
+        throw new Error('No items in feed');
       }
       
-      const articles = feed.items.map(item => {
-        // Try to find image
+      return feed.items.map(item => {
         let imageUrl = '';
         if (item['media:content']?.$?.url) {
           imageUrl = item['media:content'].$.url;
@@ -108,20 +104,23 @@ const fetchRssFeed = async (sourceUrl: string, sourceName: string): Promise<Arti
         };
       });
       
-      console.log(`✅ ${sourceName}: ${articles.length} articles`);
-      return articles;
-      
     } catch (error) {
-      console.warn(`❌ ${sourceName} failed with proxy ${proxyUrl}:`, error);
-      continue; // Try next proxy
+      throw error;
     }
-  }
+  });
 
-  console.error(`All proxies failed for ${sourceName}`);
-  return [];
+  try {
+    // Race all proxy attempts - use the first successful one
+    const articles = await Promise.any(proxyPromises);
+    console.log(`✅ ${sourceName}: ${articles.length} articles`);
+    return articles;
+  } catch (error) {
+    console.warn(`❌ All proxies failed for ${sourceName}`);
+    return [];
+  }
 };
 
-// Function to fetch news from all sources
+// Optimized main fetch function
 export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
   console.log('🚀 Starting news fetch...');
   
@@ -142,33 +141,32 @@ export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
     }
   }
   
-  // Fetch fresh data
   try {
-    // Process sources in smaller batches to avoid overwhelming
-    const batchSize = 3;
-    const allArticles: Article[] = [];
+    // Fetch all sources in parallel with individual timeouts
+    const sourcePromises = news_sources.map(source => 
+      Promise.race([
+        fetchRssFeed(source.url, source.name),
+        // Individual source timeout of 6 seconds
+        new Promise<Article[]>((_, reject) => 
+          setTimeout(() => reject(new Error(`${source.name} timeout`)), 6000)
+        )
+      ]).catch(error => {
+        console.error(`Error fetching ${source.name}:`, error.message);
+        return []; // Return empty array on error
+      })
+    );
     
-    for (let i = 0; i < news_sources.length; i += batchSize) {
-      const batch = news_sources.slice(i, i + batchSize);
-      
-      const promises = batch.map(source => 
-        fetchRssFeed(source.url, source.name).catch(error => {
-          console.error(`Batch error for ${source.name}:`, error);
-          return []; // Return empty array on error
-        })
-      );
-      
-      const results = await Promise.all(promises);
-      const batchArticles = results.flat();
-      allArticles.push(...batchArticles);
-      
-      console.log(`Batch ${Math.floor(i / batchSize) + 1} complete: ${batchArticles.length} articles`);
-      
-      // Small delay between batches
-      if (i + batchSize < news_sources.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait for all requests to complete (or timeout)
+    const results = await Promise.allSettled(sourcePromises);
+    
+    const allArticles: Article[] = [];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        allArticles.push(...result.value);
+      } else {
+        console.warn(`Source ${news_sources[index].name} failed:`, result.reason);
       }
-    }
+    });
     
     // Sort by date
     allArticles.sort((a, b) => {
@@ -196,7 +194,7 @@ export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
   } catch (error) {
     console.error('❌ Fatal error during fetch:', error);
     
-    // Try to return expired cache as fallback
+    // Return expired cache as fallback
     const cachedData = localStorage.getItem(CACHE_KEY);
     if (cachedData) {
       try {
@@ -212,7 +210,100 @@ export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
   }
 };
 
-// Export test function
+// Progressive loading function - load priority sources first
+export const fetchNewsProgressively = async (
+  onProgress?: (articles: Article[], isComplete: boolean) => void
+): Promise<Article[]> => {
+  console.log('🚀 Starting progressive news fetch...');
+  
+  // Check cache first
+  const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+  const now = new Date().getTime();
+  
+  if (cachedTimestamp && (now - parseInt(cachedTimestamp)) < CACHE_DURATION) {
+    const cachedData = localStorage.getItem(CACHE_KEY);
+    if (cachedData) {
+      try {
+        const articles = JSON.parse(cachedData);
+        console.log(`📦 Using cached data: ${articles.length} articles`);
+        onProgress?.(articles, true);
+        return articles;
+      } catch (error) {
+        console.warn('Cache parse error, fetching fresh data');
+      }
+    }
+  }
+  
+  // Define priority sources (adjust based on your needs)
+  const prioritySources = news_sources.slice(0, 3);
+  const remainingSources = news_sources.slice(3);
+  
+  let allArticles: Article[] = [];
+  
+  try {
+    // Fetch priority sources first
+    const priorityPromises = prioritySources.map(source => 
+      fetchRssFeed(source.url, source.name).catch(() => [])
+    );
+    
+    const priorityResults = await Promise.all(priorityPromises);
+    const priorityArticles = priorityResults.flat();
+    
+    // Sort and send initial results
+    priorityArticles.sort((a, b) => {
+      try {
+        return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+      } catch {
+        return 0;
+      }
+    });
+    
+    allArticles = priorityArticles;
+    console.log(`📦 Priority sources loaded: ${priorityArticles.length} articles`);
+    onProgress?.(priorityArticles, false);
+    
+    // Fetch remaining sources
+    if (remainingSources.length > 0) {
+      const remainingPromises = remainingSources.map(source => 
+        fetchRssFeed(source.url, source.name).catch(() => [])
+      );
+      
+      const remainingResults = await Promise.all(remainingPromises);
+      const remainingArticles = remainingResults.flat();
+      
+      // Combine and sort all articles
+      allArticles = [...priorityArticles, ...remainingArticles];
+      allArticles.sort((a, b) => {
+        try {
+          return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+        } catch {
+          return 0;
+        }
+      });
+      
+      console.log(`🎉 All sources loaded: ${allArticles.length} total articles`);
+      onProgress?.(allArticles, true);
+    }
+    
+    // Cache results
+    if (allArticles.length > 0) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(allArticles));
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, now.toString());
+      } catch (error) {
+        console.warn('Failed to cache results:', error);
+      }
+    }
+    
+    return allArticles;
+    
+  } catch (error) {
+    console.error('❌ Error during progressive fetch:', error);
+    onProgress?.(allArticles, true);
+    return allArticles;
+  }
+};
+
 export const testSingleSource = async (sourceName: string): Promise<Article[]> => {
   const source = news_sources.find(s => s.name === sourceName);
   if (!source) {
