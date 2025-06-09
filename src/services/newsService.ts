@@ -56,9 +56,10 @@ const sanitizeXml = (xml: string): string => {
 
 // List of CORS proxies to try in order
 const CORS_PROXIES = [
-  'https://api.allorigins.win/raw?url=',
   'https://corsproxy.io/?',
-  'https://cors-anywhere.herokuapp.com/',
+  'https://api.allorigins.win/raw?url=',
+  'https://proxy.cors.sh/',
+  'https://cors-anywhere.herokuapp.com/'
 ];
 
 // Function to fetch RSS feed from a source
