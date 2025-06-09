@@ -11,415 +11,297 @@ type CustomItem = {
   content: string;
   contentSnippet?: string;
   description?: string;
-  'media:content'?: { $: { url: string } };
-  enclosure?: { url: string };
-  'media:thumbnail'?: { $: { url: string } }[];
+  'media:content'?: {
+    $: {
+      url: string;
+    };
+  };
+  enclosure?: {
+    url: string;
+  };
+  'media:thumbnail'?: {
+    $: {
+      url: string;
+    };
+  }[];
 };
 
-// Lightweight parser with minimal fields
 const parser = new Parser<any, CustomItem>({
   customFields: {
-    item: ['content', 'contentSnippet', 'description']
+    item: [
+      ['media:content', 'media:content'],
+      ['media:thumbnail', 'media:thumbnail'],
+      'enclosure',
+      'content',
+      'description',
+      'contentSnippet',
+    ],
   },
-  timeout: 2000 // Parser timeout
 });
 
-// Multi-level caching strategy
-const CACHE_KEY = 'news_cache_v2';
-const CACHE_TIMESTAMP_KEY = 'news_cache_timestamp_v2';
-const PRIORITY_CACHE_KEY = 'priority_news_cache';
-const SOURCE_SUCCESS_CACHE = 'source_success_rates';
-const CACHE_DURATION = 90 * 1000; // 1.5 minutes for faster updates
-const PRIORITY_CACHE_DURATION = 30 * 1000; // 30 seconds for priority sources
+// Reduced cache duration for fresher content
+const CACHE_KEY = 'news_cache';
+const CACHE_TIMESTAMP_KEY = 'news_cache_timestamp';
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
-// Fastest and most reliable proxies first
-const OPTIMIZED_PROXIES = [
+// Optimized CORS proxies - fastest first
+const CORS_PROXIES = [
   'https://corsproxy.io/?',
-  'https://api.allorigins.win/raw?url='
+  'https://api.allorigins.win/raw?url=',
 ];
 
-// Source performance tracking
-interface SourceStats {
-  successRate: number;
-  avgResponseTime: number;
-  lastSuccess: number;
-  failures: number;
-}
-
-class SourceManager {
-  private stats: Map<string, SourceStats> = new Map();
-  
-  constructor() {
-    this.loadStats();
-  }
-  
-  private loadStats() {
-    try {
-      const saved = localStorage.getItem(SOURCE_SUCCESS_CACHE);
-      if (saved) {
-        const data = JSON.parse(saved);
-        this.stats = new Map(Object.entries(data));
-      }
-    } catch (error) {
-      console.warn('Failed to load source stats');
-    }
-  }
-  
-  private saveStats() {
-    try {
-      const data = Object.fromEntries(this.stats);
-      localStorage.setItem(SOURCE_SUCCESS_CACHE, JSON.stringify(data));
-    } catch (error) {
-      console.warn('Failed to save source stats');
-    }
-  }
-  
-  recordSuccess(sourceName: string, responseTime: number) {
-    const current = this.stats.get(sourceName) || {
-      successRate: 0,
-      avgResponseTime: 5000,
-      lastSuccess: 0,
-      failures: 0
-    };
-    
-    current.successRate = Math.min(1, current.successRate + 0.1);
-    current.avgResponseTime = (current.avgResponseTime + responseTime) / 2;
-    current.lastSuccess = Date.now();
-    current.failures = Math.max(0, current.failures - 1);
-    
-    this.stats.set(sourceName, current);
-    this.saveStats();
-  }
-  
-  recordFailure(sourceName: string) {
-    const current = this.stats.get(sourceName) || {
-      successRate: 0.5,
-      avgResponseTime: 5000,
-      lastSuccess: 0,
-      failures: 0
-    };
-    
-    current.successRate = Math.max(0, current.successRate - 0.2);
-    current.failures += 1;
-    
-    this.stats.set(sourceName, current);
-    this.saveStats();
-  }
-  
-  getSortedSources() {
-    return news_sources.sort((a, b) => {
-      const statsA = this.stats.get(a.name) || { successRate: 0.5, avgResponseTime: 5000, lastSuccess: 0, failures: 0 };
-      const statsB = this.stats.get(b.name) || { successRate: 0.5, avgResponseTime: 5000, lastSuccess: 0, failures: 0 };
-      
-      // Prioritize by success rate, then by response time
-      const scoreA = statsA.successRate - (statsA.avgResponseTime / 10000) - (statsA.failures * 0.1);
-      const scoreB = statsB.successRate - (statsB.avgResponseTime / 10000) - (statsB.failures * 0.1);
-      
-      return scoreB - scoreA;
-    });
-  }
-  
-  shouldSkipSource(sourceName: string): boolean {
-    const stats = this.stats.get(sourceName);
-    if (!stats) return false;
-    
-    // Skip if success rate is very low and recent failures
-    return stats.successRate < 0.1 && stats.failures > 3 && (Date.now() - stats.lastSuccess) > 300000; // 5 minutes
-  }
-}
-
-const sourceManager = new SourceManager();
-
-// Optimized XML sanitization (faster regex)
 const sanitizeXml = (xml: string): string => {
-  return xml.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/g, '&amp;');
+  return xml
+    .replace(/&(?![a-zA-Z0-9#]{1,7};)/g, '&amp;')
+    .replace(/&amp;amp;/g, '&amp;');
 };
 
-// Ultra-fast RSS fetcher with smart proxy selection
+// Optimized RSS fetch with faster timeouts and parallel proxy attempts
 const fetchRssFeed = async (sourceUrl: string, sourceName: string): Promise<Article[]> => {
-  if (sourceManager.shouldSkipSource(sourceName)) {
-    console.log(`⏭️ Skipping ${sourceName} (poor performance)`);
-    return [];
-  }
+  console.log(`Fetching from ${sourceName}...`);
   
-  const startTime = Date.now();
-  
-  // Use only the fastest proxy for each source
-  const proxy = OPTIMIZED_PROXIES[0]; // Start with fastest
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-    
-    const response = await axios.get(`${proxy}${encodeURIComponent(sourceUrl)}`, {
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/rss+xml, application/xml, text/xml',
-        'User-Agent': 'NewsReader/1.0'
-      },
-      maxContentLength: 500000, // 500KB limit
-      timeout: 3000
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (!response.data || typeof response.data !== 'string') {
-      throw new Error('Invalid response data');
-    }
-    
-    // Quick validation before parsing
-    if (!response.data.includes('<rss') && !response.data.includes('<feed')) {
-      throw new Error('Not a valid RSS/Atom feed');
-    }
-    
-    const sanitizedXml = sanitizeXml(response.data);
-    const feed = await parser.parseString(sanitizedXml);
-    
-    if (!feed.items?.length) {
-      throw new Error('No items in feed');
-    }
-    
-    // Limit articles per source for faster processing
-    const limitedItems = feed.items.slice(0, 15);
-    
-    const articles = limitedItems.map(item => {
-      // Simplified image extraction
-      let imageUrl = '';
-      if (item.enclosure?.url && item.enclosure.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-        imageUrl = item.enclosure.url;
+  // Try all proxies in parallel instead of sequential
+  const proxyPromises = CORS_PROXIES.map(async (proxyUrl) => {
+    try {
+      const response = await axios.get(`${proxyUrl}${encodeURIComponent(sourceUrl)}`, {
+        timeout: 4000, // Reduced timeout
+        headers: {
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        }
+      });
+      
+      if (!response.data) {
+        throw new Error('No data received');
       }
       
-      return {
-        id: uuidv4(),
-        title: (item.title || 'Untitled').substring(0, 200), // Limit title length
-        link: item.link || '',
-        pubDate: item.pubDate || new Date().toISOString(),
-        content: (item.contentSnippet || item.content || item.description || '').substring(0, 500), // Limit content
-        image: imageUrl,
-        source: sourceName
-      };
-    });
-    
-    const responseTime = Date.now() - startTime;
-    sourceManager.recordSuccess(sourceName, responseTime);
-    
-    console.log(`✅ ${sourceName}: ${articles.length} articles (${responseTime}ms)`);
+      const sanitizedXml = sanitizeXml(String(response.data));
+      const feed = await parser.parseString(sanitizedXml);
+      
+      if (!feed.items || feed.items.length === 0) {
+        throw new Error('No items in feed');
+      }
+      
+      return feed.items.map(item => {
+        let imageUrl = '';
+        if (item['media:content']?.$?.url) {
+          imageUrl = item['media:content'].$.url;
+        } else if (item.enclosure?.url) {
+          imageUrl = item.enclosure.url;
+        } else if (item['media:thumbnail']?.[0]?.$?.url) {
+          imageUrl = item['media:thumbnail'][0].$.url;
+        }
+        
+        const content = item.content || item.contentSnippet || item.description || '';
+        
+        return {
+          id: uuidv4(),
+          title: item.title || 'Untitled',
+          link: item.link || '',
+          pubDate: item.pubDate || new Date().toISOString(),
+          content: content,
+          image: imageUrl,
+          source: sourceName
+        };
+      });
+      
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  try {
+    // Race all proxy attempts - use the first successful one
+    const articles = await Promise.any(proxyPromises);
+    console.log(`✅ ${sourceName}: ${articles.length} articles`);
     return articles;
-    
   } catch (error) {
-    sourceManager.recordFailure(sourceName);
-    console.warn(`❌ ${sourceName} failed: ${error.message}`);
+    console.warn(`❌ All proxies failed for ${sourceName}`);
     return [];
   }
 };
 
-// Smart cache management
-class CacheManager {
-  static get(key: string): any {
-    try {
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
-  }
-  
-  static set(key: string, data: any): void {
-    try {
-      localStorage.setItem(key, JSON.stringify(data));
-    } catch (error) {
-      // Handle quota exceeded
-      this.clearOldCache();
-      try {
-        localStorage.setItem(key, JSON.stringify(data));
-      } catch {
-        console.warn('Failed to cache data');
-      }
-    }
-  }
-  
-  static clearOldCache(): void {
-    const keys = Object.keys(localStorage);
-    keys.forEach(key => {
-      if (key.includes('cache') && !key.includes('v2')) {
-        localStorage.removeItem(key);
-      }
-    });
-  }
-  
-  static isExpired(timestamp: string, duration: number): boolean {
-    return Date.now() - parseInt(timestamp) > duration;
-  }
-}
-
-// Lightning-fast priority loading
-export const fetchPriorityNews = async (): Promise<Article[]> => {
-  console.log('⚡ Fetching priority news...');
-  
-  // Check priority cache first
-  const priorityTimestamp = localStorage.getItem('priority_timestamp');
-  if (priorityTimestamp && !CacheManager.isExpired(priorityTimestamp, PRIORITY_CACHE_DURATION)) {
-    const cached = CacheManager.get(PRIORITY_CACHE_KEY);
-    if (cached?.length) {
-      console.log(`📦 Using priority cache: ${cached.length} articles`);
-      return cached;
-    }
-  }
-  
-  // Get top 3 performing sources
-  const topSources = sourceManager.getSortedSources().slice(0, 3);
-  
-  const articles = await Promise.all(
-    topSources.map(source => fetchRssFeed(source.url, source.name))
-  );
-  
-  const flattened = articles.flat().sort((a, b) => 
-    new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime()
-  );
-  
-  // Cache priority results
-  CacheManager.set(PRIORITY_CACHE_KEY, flattened);
-  localStorage.setItem('priority_timestamp', Date.now().toString());
-  
-  return flattened;
-};
-
-// Main optimized fetch function
+// Optimized main fetch function
 export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
-  console.log('🚀 Starting optimized news fetch...');
+  console.log('🚀 Starting news fetch...');
   
-  // Multi-level cache check
+  // Check cache first
   const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-  if (cachedTimestamp && !CacheManager.isExpired(cachedTimestamp, CACHE_DURATION)) {
-    const cached = CacheManager.get(CACHE_KEY);
-    if (cached?.length) {
-      console.log(`📦 Using main cache: ${cached.length} articles`);
-      return cached;
+  const now = new Date().getTime();
+  
+  if (cachedTimestamp && (now - parseInt(cachedTimestamp)) < CACHE_DURATION) {
+    const cachedData = localStorage.getItem(CACHE_KEY);
+    if (cachedData) {
+      try {
+        const articles = JSON.parse(cachedData);
+        console.log(`📦 Using cached data: ${articles.length} articles`);
+        return articles;
+      } catch (error) {
+        console.warn('Cache parse error, fetching fresh data');
+      }
     }
   }
   
   try {
-    // Get intelligently sorted sources
-    const sortedSources = sourceManager.getSortedSources();
-    
-    // Staggered loading: Top sources first, then others
-    const topTier = sortedSources.slice(0, 5);
-    const remainingSources = sortedSources.slice(5);
-    
-    // Load top tier with minimal delay
-    const topPromises = topTier.map(source => 
-      fetchRssFeed(source.url, source.name)
+    // Fetch all sources in parallel with individual timeouts
+    const sourcePromises = news_sources.map(source => 
+      Promise.race([
+        fetchRssFeed(source.url, source.name),
+        // Individual source timeout of 6 seconds
+        new Promise<Article[]>((_, reject) => 
+          setTimeout(() => reject(new Error(`${source.name} timeout`)), 6000)
+        )
+      ]).catch(error => {
+        console.error(`Error fetching ${source.name}:`, error.message);
+        return []; // Return empty array on error
+      })
     );
     
-    const topResults = await Promise.allSettled(topPromises);
-    const topArticles = topResults
-      .filter(result => result.status === 'fulfilled')
-      .flatMap(result => result.value);
+    // Wait for all requests to complete (or timeout)
+    const results = await Promise.allSettled(sourcePromises);
     
-    // Load remaining sources in background
-    const remainingPromises = remainingSources.map(source => 
-      fetchRssFeed(source.url, source.name)
-    );
+    const allArticles: Article[] = [];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        allArticles.push(...result.value);
+      } else {
+        console.warn(`Source ${news_sources[index].name} failed:`, result.reason);
+      }
+    });
     
-    const remainingResults = await Promise.allSettled(remainingPromises);
-    const remainingArticles = remainingResults
-      .filter(result => result.status === 'fulfilled')
-      .flatMap(result => result.value);
+    // Sort by date
+    allArticles.sort((a, b) => {
+      try {
+        return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+      } catch {
+        return 0;
+      }
+    });
     
-    // Combine and sort
-    const allArticles = [...topArticles, ...remainingArticles];
-    allArticles.sort((a, b) => 
-      new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime()
-    );
-    
-    console.log(`🎉 Fetch complete: ${allArticles.length} articles`);
+    console.log(`🎉 Fetch complete: ${allArticles.length} total articles`);
     
     // Cache results
-    CacheManager.set(CACHE_KEY, allArticles);
-    localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+    if (allArticles.length > 0) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(allArticles));
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, now.toString());
+      } catch (error) {
+        console.warn('Failed to cache results:', error);
+      }
+    }
     
     return allArticles;
     
   } catch (error) {
-    console.error('❌ Error during fetch:', error);
+    console.error('❌ Fatal error during fetch:', error);
     
-    // Return any cached data as fallback
-    const fallback = CacheManager.get(CACHE_KEY) || [];
-    console.log(`📦 Using fallback cache: ${fallback.length} articles`);
-    return fallback;
+    // Return expired cache as fallback
+    const cachedData = localStorage.getItem(CACHE_KEY);
+    if (cachedData) {
+      try {
+        const articles = JSON.parse(cachedData);
+        console.log(`📦 Using expired cache as fallback: ${articles.length} articles`);
+        return articles;
+      } catch {
+        console.error('Failed to parse fallback cache');
+      }
+    }
+    
+    return [];
   }
 };
 
-// Super-fast progressive loading with intelligent batching
+// Progressive loading function - load priority sources first
 export const fetchNewsProgressively = async (
   onProgress?: (articles: Article[], isComplete: boolean) => void
 ): Promise<Article[]> => {
-  console.log('⚡ Starting ultra-fast progressive fetch...');
+  console.log('🚀 Starting progressive news fetch...');
   
-  // Try priority cache first
-  const priorityArticles = await fetchPriorityNews();
-  if (priorityArticles.length) {
-    onProgress?.(priorityArticles, false);
-  }
-  
-  // Check main cache
+  // Check cache first
   const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-  if (cachedTimestamp && !CacheManager.isExpired(cachedTimestamp, CACHE_DURATION)) {
-    const cached = CacheManager.get(CACHE_KEY);
-    if (cached?.length) {
-      console.log(`📦 Using full cache: ${cached.length} articles`);
-      onProgress?.(cached, true);
-      return cached;
+  const now = new Date().getTime();
+  
+  if (cachedTimestamp && (now - parseInt(cachedTimestamp)) < CACHE_DURATION) {
+    const cachedData = localStorage.getItem(CACHE_KEY);
+    if (cachedData) {
+      try {
+        const articles = JSON.parse(cachedData);
+        console.log(`📦 Using cached data: ${articles.length} articles`);
+        onProgress?.(articles, true);
+        return articles;
+      } catch (error) {
+        console.warn('Cache parse error, fetching fresh data');
+      }
     }
   }
   
-  // Progressive loading with smart batching
-  const sortedSources = sourceManager.getSortedSources();
-  let allArticles: Article[] = [...priorityArticles];
+  // Define priority sources (adjust based on your needs)
+  const prioritySources = news_sources.slice(0, 3);
+  const remainingSources = news_sources.slice(3);
   
-  // Load in optimized batches
-  const batchSize = 4;
-  for (let i = 0; i < sortedSources.length; i += batchSize) {
-    const batch = sortedSources.slice(i, i + batchSize);
-    
-    const batchPromises = batch.map(source => 
-      fetchRssFeed(source.url, source.name)
+  let allArticles: Article[] = [];
+  
+  try {
+    // Fetch priority sources first
+    const priorityPromises = prioritySources.map(source => 
+      fetchRssFeed(source.url, source.name).catch(() => [])
     );
     
-    const batchResults = await Promise.allSettled(batchPromises);
-    const batchArticles = batchResults
-      .filter(result => result.status === 'fulfilled')
-      .flatMap(result => result.value);
+    const priorityResults = await Promise.all(priorityPromises);
+    const priorityArticles = priorityResults.flat();
     
-    // Add new articles and sort
-    allArticles = [...allArticles, ...batchArticles];
-    
-    // Remove duplicates efficiently
-    const seen = new Set();
-    allArticles = allArticles.filter(article => {
-      const key = `${article.title}-${article.source}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    // Sort and send initial results
+    priorityArticles.sort((a, b) => {
+      try {
+        return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+      } catch {
+        return 0;
+      }
     });
     
-    // Sort by date
-    allArticles.sort((a, b) => 
-      new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime()
-    );
+    allArticles = priorityArticles;
+    console.log(`📦 Priority sources loaded: ${priorityArticles.length} articles`);
+    onProgress?.(priorityArticles, false);
     
-    // Update progress
-    const isComplete = i + batchSize >= sortedSources.length;
-    onProgress?.(allArticles, isComplete);
+    // Fetch remaining sources
+    if (remainingSources.length > 0) {
+      const remainingPromises = remainingSources.map(source => 
+        fetchRssFeed(source.url, source.name).catch(() => [])
+      );
+      
+      const remainingResults = await Promise.all(remainingPromises);
+      const remainingArticles = remainingResults.flat();
+      
+      // Combine and sort all articles
+      allArticles = [...priorityArticles, ...remainingArticles];
+      allArticles.sort((a, b) => {
+        try {
+          return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+        } catch {
+          return 0;
+        }
+      });
+      
+      console.log(`🎉 All sources loaded: ${allArticles.length} total articles`);
+      onProgress?.(allArticles, true);
+    }
     
-    console.log(`Batch ${Math.floor(i / batchSize) + 1}: ${allArticles.length} total articles`);
+    // Cache results
+    if (allArticles.length > 0) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(allArticles));
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, now.toString());
+      } catch (error) {
+        console.warn('Failed to cache results:', error);
+      }
+    }
+    
+    return allArticles;
+    
+  } catch (error) {
+    console.error('❌ Error during progressive fetch:', error);
+    onProgress?.(allArticles, true);
+    return allArticles;
   }
-  
-  // Cache final results
-  CacheManager.set(CACHE_KEY, allArticles);
-  localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
-  
-  return allArticles;
 };
 
 export const testSingleSource = async (sourceName: string): Promise<Article[]> => {
