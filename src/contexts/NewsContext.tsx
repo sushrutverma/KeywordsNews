@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useQuery } from 'react-query';
-import { fetchNewsFromAllSources } from '../services/newsService';
+import { fetchNewsProgressively } from '../services/newsService'; // Updated import
 import { Article } from '../types';
 
 interface NewsContextType {
@@ -14,6 +14,7 @@ interface NewsContextType {
   saveArticle: (article: Article) => void;
   removeFromSaved: (articleId: string) => void;
   currentKeyword: string;
+  isProgressiveLoading: boolean; // New state for progressive loading
 }
 
 const NewsContext = createContext<NewsContextType | undefined>(undefined);
@@ -33,27 +34,59 @@ interface NewsProviderProps {
 export const NewsProvider = ({ children }: NewsProviderProps) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
+  const [isProgressiveLoading, setIsProgressiveLoading] = useState(false);
   const [savedArticles, setSavedArticles] = useState<Article[]>(() => {
     const saved = localStorage.getItem('savedArticles');
     return saved ? JSON.parse(saved) : [];
   });
   const [currentKeyword, setCurrentKeyword] = useState('');
 
-  const { data, isLoading, isError, refetch } = useQuery('news', fetchNewsFromAllSources, {
-    onSuccess: (data) => {
-      setArticles(data);
-      setFilteredArticles(data);
+  // Updated useQuery with progressive loading
+  const { data, isLoading, isError, refetch } = useQuery(
+    'news', 
+    () => {
+      setIsProgressiveLoading(true);
+      return fetchNewsProgressively((progressArticles, isComplete) => {
+        console.log(`Progressive update: ${progressArticles.length} articles, complete: ${isComplete}`);
+        
+        // Update articles as they come in
+        setArticles(progressArticles);
+        setFilteredArticles(progressArticles);
+        
+        // Update progressive loading state
+        if (isComplete) {
+          setIsProgressiveLoading(false);
+        }
+      });
     },
-  });
+    {
+      staleTime: 2 * 60 * 1000, // 2 minutes - data stays fresh
+      cacheTime: 5 * 60 * 1000, // 5 minutes - cache duration
+      refetchOnWindowFocus: false, // Don't refetch when window gets focus
+      onSuccess: (data) => {
+        setArticles(data);
+        setFilteredArticles(data);
+        setIsProgressiveLoading(false);
+      },
+      onError: () => {
+        setIsProgressiveLoading(false);
+      }
+    }
+  );
 
   useEffect(() => {
     localStorage.setItem('savedArticles', JSON.stringify(savedArticles));
   }, [savedArticles]);
 
   const refreshNews = async () => {
-    await refetch();
-    if (currentKeyword) {
-      searchArticles(currentKeyword);
+    setIsProgressiveLoading(true);
+    try {
+      await refetch();
+      if (currentKeyword) {
+        searchArticles(currentKeyword);
+      }
+    } finally {
+      setIsProgressiveLoading(false);
     }
   };
 
@@ -63,7 +96,6 @@ export const NewsProvider = ({ children }: NewsProviderProps) => {
       setFilteredArticles(articles);
       return;
     }
-
     const lowerKeyword = keyword.toLowerCase();
     const filtered = articles.filter(
       article => 
@@ -97,7 +129,8 @@ export const NewsProvider = ({ children }: NewsProviderProps) => {
       savedArticles,
       saveArticle,
       removeFromSaved,
-      currentKeyword
+      currentKeyword,
+      isProgressiveLoading // New value available to components
     }}>
       {children}
     </NewsContext.Provider>
