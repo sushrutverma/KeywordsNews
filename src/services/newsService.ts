@@ -67,7 +67,10 @@ const sanitizeXml = (xml: string): string => {
 const CORS_PROXIES = [
   'https://api.allorigins.win/raw?url=',
   'https://corsproxy.io/?',
-  // Remove unreliable proxies
+  'https://proxy.cors.sh/',
+  'https://cors-anywhere.herokuapp.com/',
+  // Add more backup proxies
+  'https://api.codetabs.com/v1/proxy?quest=',
 ];
 
 // Detect user agent for platform-specific handling
@@ -97,34 +100,30 @@ const fetchRssFeed = async (sourceUrl: string, sourceName: string): Promise<Arti
     
     try {
       const response = await axios.get(`${proxyUrl}${encodeURIComponent(sourceUrl)}`, {
-        timeout: 15000, // Increased timeout
+        timeout: 10000, // Reduced back to 10 seconds
         headers: {
           'Accept': 'application/rss+xml, application/xml, text/xml, application/atom+xml, */*',
           'User-Agent': userAgent,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
         },
-        // Add these options for better compatibility
+        // Simplified options for better compatibility
         validateStatus: function (status) {
-          return status >= 200 && status < 300;
+          return status >= 200 && status < 400; // Accept redirects too
         },
-        responseType: 'text', // Ensure we get text response
-        transformResponse: [(data) => data] // Don't let axios transform the response
       });
       
       // Check if we got valid data
-      if (!response.data || typeof response.data !== 'string') {
-        throw new Error('Invalid response data');
+      if (!response.data) {
+        throw new Error('No response data');
       }
       
       console.log(`Successfully fetched from ${sourceName} using proxy ${i + 1}`);
       
       // Sanitize the XML content before parsing
-      const sanitizedXml = sanitizeXml(response.data);
+      const sanitizedXml = sanitizeXml(String(response.data));
       
-      // Additional validation before parsing
-      if (!sanitizedXml.includes('<rss') && !sanitizedXml.includes('<feed') && !sanitizedXml.includes('<channel')) {
-        throw new Error('Response does not appear to be valid RSS/XML');
+      // Less strict validation - just check if it looks like XML/RSS
+      if (!sanitizedXml.includes('<') || sanitizedXml.length < 50) {
+        throw new Error('Response does not appear to be valid XML');
       }
       
       const feed = await parser.parseString(sanitizedXml);
@@ -230,8 +229,8 @@ export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
   try {
     console.log(`Fetching from ${news_sources.length} sources...`);
     
-    // Limit concurrent requests to avoid overwhelming the browser/proxies
-    const batchSize = 3;
+    // Limit concurrent requests but use smaller batches
+    const batchSize = 2;
     const allArticles: Article[] = [];
     
     for (let i = 0; i < news_sources.length; i += batchSize) {
