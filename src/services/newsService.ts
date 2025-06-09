@@ -38,7 +38,6 @@ const parser = new Parser<any, CustomItem>({
       'contentSnippet',
     ],
   },
-  timeout: 15000, // Increase timeout for slower connections
 });
 
 // Local storage cache keys
@@ -48,164 +47,85 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Function to sanitize XML content
 const sanitizeXml = (xml: string): string => {
-  if (typeof xml !== 'string') {
-    return '';
-  }
-  
   return xml
-    // Replace unescaped & characters that aren't part of an entity
     .replace(/&(?![a-zA-Z0-9#]{1,7};)/g, '&amp;')
-    // Fix any double-escaped ampersands
-    .replace(/&amp;amp;/g, '&amp;')
-    // Remove null bytes that can cause issues on iOS
-    .replace(/\0/g, '')
-    // Fix malformed XML declarations
-    .replace(/<\?xml[^>]*\?>/i, '<?xml version="1.0" encoding="UTF-8"?>');
+    .replace(/&amp;amp;/g, '&amp;');
 };
 
-// Updated CORS proxies with better reliability
+// Simple CORS proxy list - keeping the ones that work most reliably
 const CORS_PROXIES = [
   'https://api.allorigins.win/raw?url=',
   'https://corsproxy.io/?',
   'https://proxy.cors.sh/',
-  'https://cors-anywhere.herokuapp.com/',
-  // Add more backup proxies
-  'https://api.codetabs.com/v1/proxy?quest=',
 ];
-
-// Detect user agent for platform-specific handling
-const getUserAgent = (): string => {
-  const userAgent = navigator.userAgent;
-  
-  if (/iPhone|iPad|iPod/i.test(userAgent)) {
-    return 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1';
-  } else if (/Macintosh/i.test(userAgent)) {
-    return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
-  }
-  
-  return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
-};
 
 // Function to fetch RSS feed from a source
 const fetchRssFeed = async (sourceUrl: string, sourceName: string): Promise<Article[]> => {
-  let lastError: Error | null = null;
-  const userAgent = getUserAgent();
-
-  console.log(`Attempting to fetch from ${sourceName}...`);
-
-  // Try each CORS proxy in sequence
-  for (let i = 0; i < CORS_PROXIES.length; i++) {
-    const proxyUrl = CORS_PROXIES[i];
-    console.log(`Trying proxy ${i + 1}/${CORS_PROXIES.length}: ${proxyUrl}`);
-    
+  console.log(`Fetching from ${sourceName}...`);
+  
+  // Try each CORS proxy
+  for (const proxyUrl of CORS_PROXIES) {
     try {
       const response = await axios.get(`${proxyUrl}${encodeURIComponent(sourceUrl)}`, {
-        timeout: 10000, // Reduced back to 10 seconds
+        timeout: 8000,
         headers: {
-          'Accept': 'application/rss+xml, application/xml, text/xml, application/atom+xml, */*',
-          'User-Agent': userAgent,
-        },
-        // Simplified options for better compatibility
-        validateStatus: function (status) {
-          return status >= 200 && status < 400; // Accept redirects too
-        },
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        }
       });
       
-      // Check if we got valid data
       if (!response.data) {
-        throw new Error('No response data');
+        continue; // Try next proxy
       }
       
-      console.log(`Successfully fetched from ${sourceName} using proxy ${i + 1}`);
-      
-      // Sanitize the XML content before parsing
       const sanitizedXml = sanitizeXml(String(response.data));
-      
-      // Less strict validation - just check if it looks like XML/RSS
-      if (!sanitizedXml.includes('<') || sanitizedXml.length < 50) {
-        throw new Error('Response does not appear to be valid XML');
-      }
-      
       const feed = await parser.parseString(sanitizedXml);
       
-      if (!feed.items || !Array.isArray(feed.items)) {
-        console.warn(`No items found in feed for ${sourceName}`);
-        return [];
+      if (!feed.items) {
+        continue; // Try next proxy
       }
       
       const articles = feed.items.map(item => {
-        // Try to find image in different RSS formats
+        // Try to find image
         let imageUrl = '';
-        try {
-          if (item['media:content']?.$?.url) {
-            imageUrl = item['media:content'].$.url;
-          } else if (item.enclosure?.url && item.enclosure.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-            imageUrl = item.enclosure.url;
-          } else if (item['media:thumbnail']?.[0]?.$?.url) {
-            imageUrl = item['media:thumbnail'][0].$.url;
-          }
-        } catch (imageError) {
-          console.warn('Error extracting image:', imageError);
+        if (item['media:content']?.$?.url) {
+          imageUrl = item['media:content'].$.url;
+        } else if (item.enclosure?.url) {
+          imageUrl = item.enclosure.url;
+        } else if (item['media:thumbnail']?.[0]?.$?.url) {
+          imageUrl = item['media:thumbnail'][0].$.url;
         }
         
-        // Get content from different possible fields
         const content = item.content || item.contentSnippet || item.description || '';
-        
-        // Validate required fields
-        const title = item.title || 'Untitled';
-        const link = item.link || '';
-        const pubDate = item.pubDate || new Date().toISOString();
         
         return {
           id: uuidv4(),
-          title: title.trim(),
-          link: link.trim(),
-          pubDate: pubDate,
+          title: item.title || 'Untitled',
+          link: item.link || '',
+          pubDate: item.pubDate || new Date().toISOString(),
           content: content,
           image: imageUrl,
           source: sourceName
         };
-      }).filter(article => article.title && article.link); // Filter out invalid articles
+      });
       
-      console.log(`Processed ${articles.length} articles from ${sourceName}`);
+      console.log(`✅ ${sourceName}: ${articles.length} articles`);
       return articles;
       
     } catch (error) {
-      lastError = error as Error;
-      console.warn(`Error fetching from ${sourceName} using proxy ${proxyUrl}:`, error);
-      
-      // If this is the last proxy, don't continue
-      if (i === CORS_PROXIES.length - 1) {
-        break;
-      }
-      
-      // Add delay between retries to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      continue;
+      console.warn(`❌ ${sourceName} failed with proxy ${proxyUrl}:`, error);
+      continue; // Try next proxy
     }
   }
 
-  // If all proxies failed, log the error and return empty array
-  console.error(`All proxies failed for ${sourceName}. Last error:`, lastError);
+  console.error(`All proxies failed for ${sourceName}`);
   return [];
-};
-
-// Function to test a single source (useful for debugging)
-export const testSingleSource = async (sourceName: string): Promise<Article[]> => {
-  const source = news_sources.find(s => s.name === sourceName);
-  if (!source) {
-    console.error(`Source ${sourceName} not found`);
-    return [];
-  }
-  
-  return await fetchRssFeed(source.url, source.name);
 };
 
 // Function to fetch news from all sources
 export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
-  console.log('Starting news fetch...');
+  console.log('🚀 Starting news fetch...');
   
-  // Check if we have valid cached data
+  // Check cache first
   const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
   const now = new Date().getTime();
   
@@ -213,51 +133,44 @@ export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
     const cachedData = localStorage.getItem(CACHE_KEY);
     if (cachedData) {
       try {
-        const parsedData = JSON.parse(cachedData);
-        console.log(`Using cached data with ${parsedData.length} articles`);
-        return parsedData;
+        const articles = JSON.parse(cachedData);
+        console.log(`📦 Using cached data: ${articles.length} articles`);
+        return articles;
       } catch (error) {
-        console.warn('Error parsing cached data:', error);
-        // Clear invalid cache
-        localStorage.removeItem(CACHE_KEY);
-        localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+        console.warn('Cache parse error, fetching fresh data');
       }
     }
   }
   
-  // If no valid cache, fetch fresh data
+  // Fetch fresh data
   try {
-    console.log(`Fetching from ${news_sources.length} sources...`);
-    
-    // Limit concurrent requests but use smaller batches
-    const batchSize = 2;
+    // Process sources in smaller batches to avoid overwhelming
+    const batchSize = 3;
     const allArticles: Article[] = [];
     
     for (let i = 0; i < news_sources.length; i += batchSize) {
       const batch = news_sources.slice(i, i + batchSize);
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(news_sources.length / batchSize)}`);
       
       const promises = batch.map(source => 
-        fetchRssFeed(source.url, source.name)
+        fetchRssFeed(source.url, source.name).catch(error => {
+          console.error(`Batch error for ${source.name}:`, error);
+          return []; // Return empty array on error
+        })
       );
       
-      const results = await Promise.allSettled(promises);
-      const batchArticles = results
-        .filter((result): result is PromiseFulfilledResult<Article[]> => result.status === 'fulfilled')
-        .map(result => result.value)
-        .flat();
-      
+      const results = await Promise.all(promises);
+      const batchArticles = results.flat();
       allArticles.push(...batchArticles);
       
-      // Add small delay between batches
+      console.log(`Batch ${Math.floor(i / batchSize) + 1} complete: ${batchArticles.length} articles`);
+      
+      // Small delay between batches
       if (i + batchSize < news_sources.length) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
     
-    console.log(`Fetched ${allArticles.length} total articles`);
-    
-    // Sort by date (newest first)
+    // Sort by date
     allArticles.sort((a, b) => {
       try {
         return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
@@ -266,32 +179,44 @@ export const fetchNewsFromAllSources = async (): Promise<Article[]> => {
       }
     });
     
-    // Cache the results
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(allArticles));
-      localStorage.setItem(CACHE_TIMESTAMP_KEY, now.toString());
-      console.log('Results cached successfully');
-    } catch (cacheError) {
-      console.warn('Error caching results:', cacheError);
+    console.log(`🎉 Fetch complete: ${allArticles.length} total articles`);
+    
+    // Cache results
+    if (allArticles.length > 0) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(allArticles));
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, now.toString());
+      } catch (error) {
+        console.warn('Failed to cache results:', error);
+      }
     }
     
     return allArticles;
     
   } catch (error) {
-    console.error('Error fetching news:', error);
+    console.error('❌ Fatal error during fetch:', error);
     
-    // Try to return cached data even if it's expired
+    // Try to return expired cache as fallback
     const cachedData = localStorage.getItem(CACHE_KEY);
     if (cachedData) {
       try {
-        const parsedData = JSON.parse(cachedData);
-        console.log('Using expired cached data as fallback');
-        return parsedData;
+        const articles = JSON.parse(cachedData);
+        console.log(`📦 Using expired cache as fallback: ${articles.length} articles`);
+        return articles;
       } catch {
-        console.error('Could not parse fallback cached data');
+        console.error('Failed to parse fallback cache');
       }
     }
     
     return [];
   }
+};
+
+// Export test function
+export const testSingleSource = async (sourceName: string): Promise<Article[]> => {
+  const source = news_sources.find(s => s.name === sourceName);
+  if (!source) {
+    throw new Error(`Source ${sourceName} not found`);
+  }
+  return await fetchRssFeed(source.url, source.name);
 };
