@@ -30,7 +30,7 @@ const Header = () => {
             <div className="absolute right-0 mt-2 w-max bg-gray-800 text-white text-xs rounded px-2 py-1 shadow">
               Developed by{" "}
               <a
-                href="https://www.in.linkedin.com/sushrutverma"
+                href="https://www.linkedin.com/in/sushrutverma/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline text-blue-400"
