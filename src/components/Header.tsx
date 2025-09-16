@@ -9,42 +9,54 @@ const Header = () => {
   const [showInfo, setShowInfo] = useState(false);
 
   return (
-    <div className="flex justify-between items-center mb-6 relative">
+    <div className="flex justify-between items-center mb-6">
       <div className="flex items-center">
-        <h1 className="text-3xl font-bold text-primary dark:text-primary-dark font-unifraktur">
-          Keywords
-        </h1>
+        <h1 className="text-3xl font-bold text-primary dark:text-primary-dark font-unifraktur">Keywords</h1>
       </div>
-
       <div className="flex items-center space-x-2">
-        {/* Info button */}
+        {/* Info Button */}
         <div className="relative">
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={() => setShowInfo(!showInfo)}
-            className="p-2 rounded-full hover:bg-gray-700"
+            className="fab p-2 rounded-full"
+            title="Developer Info"
           >
             <Info className="text-white" size={20} />
-          </button>
-
+          </motion.button>
+          
+          {/* Tooltip/Popup */}
           {showInfo && (
-            <div className="absolute right-0 mt-2 w-max bg-gray-800 text-white text-xs rounded px-2 py-1 shadow">
-              Developed by{" "}
-              <a
-                href="https://www.linkedin.com/in/sushrutverma/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline text-blue-400"
-              >
-                Sushrut Verma
-              </a>
-            </div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+              className="absolute right-0 mt-2 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 min-w-max"
+            >
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                <div className="font-medium">Developed by</div>
+                <div className="mt-1">Sushrut Verma</div>
+                <a 
+                  href="https://www.linkedin.com/in/sushrutverma" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 text-xs mt-1 block"
+                >
+                  linkedin.com/in/sushrutverma
+                </a>
+              </div>
+              {/* Arrow pointing up */}
+              <div className="absolute -top-1 right-4 w-2 h-2 bg-white dark:bg-gray-800 border-l border-t border-gray-200 dark:border-gray-700 transform rotate-45"></div>
+            </motion.div>
           )}
         </div>
 
-        {/* Settings/Login */}
         {user ? (
           <Link to="/settings">
-            <motion.button whileTap={{ scale: 0.95 }} className="fab p-2 rounded-full">
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              className="fab p-2 rounded-full"
+            >
               <Settings className="text-white" size={20} />
             </motion.button>
           </Link>
